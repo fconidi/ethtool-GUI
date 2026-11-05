@@ -90,6 +90,22 @@ class ReadLinkTest(ParseBase):
             parse_basic.read_link("eth0", run=run)
 
 
+class InvalidNameTest(unittest.TestCase):
+    def test_nothing_is_run(self):
+        calls = []
+
+        def run(args):
+            calls.append(args)
+            raise AssertionError("must not run")
+
+        for fn in (parse_basic.read_link, parse_basic.read_driver, parse_basic.read_permanent_mac):
+            for name in ("-E", "../x"):
+                with self.assertRaises(runner.InvalidInterfaceName):
+                    fn(name, run=run)
+        self.assertEqual(calls, [])
+        self.assertTrue(issubclass(runner.InvalidInterfaceName, runner.EthtoolError))
+
+
 class ReadDriverTest(ParseBase):
     def test_e1000e(self):
         run = self.run_for({("-i", "eno1"): (0, fixture("driver-e1000e.txt"), "")})

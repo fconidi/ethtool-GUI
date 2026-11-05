@@ -5,8 +5,9 @@ from __future__ import annotations
 import re
 from typing import Callable
 
+from .ifaces import valid_name
 from .models import DriverInfo, Field, LinkInfo
-from .runner import ErrorKind, NoSuchInterface, Result, classify_error, run_ethtool
+from .runner import ErrorKind, InvalidInterfaceName, NoSuchInterface, Result, classify_error, run_ethtool
 
 Runner = Callable[[list[str]], Result]
 
@@ -19,6 +20,11 @@ def _reason(stderr: str) -> str:
         if line:
             return line
     return "unavailable"
+
+
+def _require_valid(iface: str) -> None:
+    if not valid_name(iface):
+        raise InvalidInterfaceName(iface)
 
 
 def _checked(result: Result, iface: str) -> str | None:
@@ -86,6 +92,7 @@ def parse_settings(text: str) -> LinkInfo:
 
 
 def read_link(iface: str, run: Runner = run_ethtool) -> LinkInfo:
+    _require_valid(iface)
     result = run([iface])
     reason = _checked(result, iface)
     if reason is not None:
@@ -116,6 +123,7 @@ def parse_driver(text: str) -> DriverInfo:
 
 
 def read_driver(iface: str, run: Runner = run_ethtool) -> DriverInfo:
+    _require_valid(iface)
     result = run(["-i", iface])
     reason = _checked(result, iface)
     if reason is not None:
@@ -124,6 +132,7 @@ def read_driver(iface: str, run: Runner = run_ethtool) -> DriverInfo:
 
 
 def read_permanent_mac(iface: str, run: Runner = run_ethtool) -> Field[str]:
+    _require_valid(iface)
     result = run(["-P", iface])
     reason = _checked(result, iface)
     if reason is not None:

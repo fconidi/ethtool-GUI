@@ -7,11 +7,11 @@ from ethtool_gui.core.ifaces import list_interfaces, valid_name
 
 class ValidNameTest(unittest.TestCase):
     def test_accepts(self):
-        for name in ("eth0", "enp3s0f1", "wlan0.100", "a", "_x", "-x", "a" * 15):
+        for name in ("eth0", "enp3s0f1", "wlan0.100", "a", "_x", "a" * 15):
             self.assertTrue(valid_name(name), name)
 
     def test_rejects(self):
-        for name in (".", "..", "../x", "eth0:1", ".hidden", "a" * 16, "", "a/b", "a b", "eth0\n"):
+        for name in (".", "..", "../x", "eth0:1", ".hidden", "a" * 16, "", "a/b", "a b", "eth0\n", "-E", "-x", "--help", "-eth0"):
             self.assertFalse(valid_name(name), repr(name))
 
 

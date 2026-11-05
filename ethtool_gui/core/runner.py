@@ -24,6 +24,10 @@ class NoSuchInterface(EthtoolError):
     """The interface does not exist (any more)."""
 
 
+class InvalidInterfaceName(EthtoolError):
+    """The name is not a plausible interface name and was not passed to ethtool."""
+
+
 class ErrorKind(enum.Enum):
     NOT_SUPPORTED = "not_supported"
     NO_PERMISSION = "no_permission"
