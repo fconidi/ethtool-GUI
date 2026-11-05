@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=ethtool-GUI
+GenericName=Ethernet diagnostics and settings
+GenericName[it]=Diagnostica e impostazioni Ethernet
+Comment=Inspect and configure Ethernet interfaces with ethtool
+Comment[it]=Controlla e configura le interfacce Ethernet con ethtool
+Exec=ethtool-gui
+Icon=ethtool-gui
+Terminal=false
+Categories=Network;X-SysLinuxOS-Networking;
+Keywords=ethernet;ethtool;network;cable;SFP;driver;
+StartupNotify=true

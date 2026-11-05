@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<policyconfig>
+  <vendor>SysLinuxOS</vendor>
+  <action id="com.syslinuxos.ethtool-gui.change">
+    <description>Change Ethernet settings with ethtool-GUI</description>
+    <description xml:lang="it">Modifica le impostazioni Ethernet con ethtool-GUI</description>
+    <message>Authentication is required to change Ethernet settings</message>
+    <message xml:lang="it">È richiesta l'autenticazione per modificare le impostazioni Ethernet</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/ethtool-gui/ethtool-gui-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">false</annotate>
+  </action>
+</policyconfig>

@@ -19,7 +19,6 @@ from . import style  # noqa: E402
 from .common import needs_authorization  # noqa: E402
 from .helper_client import HelperClient  # noqa: E402
 from .iface_list import IfaceList, sysfs_speed  # noqa: E402
-from .pages import PlaceholderPage  # noqa: E402
 from .advanced_page import AdvancedPage  # noqa: E402
 from .simple_page import SimplePage  # noqa: E402
 from .common import persist_call  # noqa: E402
