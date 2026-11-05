@@ -9,6 +9,7 @@ ARGS = {
     "channels": ("-l", ps.read_channels), "coalesce": ("-c", ps.read_coalesce),
     "features": ("-k", ps.read_features), "eee": ("--show-eee", ps.read_eee),
     "rss": ("-x", ps.read_rss), "eeprom": ("-e", ps.read_eeprom_dump),
+    "ntuple": ("-n", ps.read_ntuple),
     "regs": ("-d", ps.read_registers_dump), "phy": ("--phy-statistics", ps.read_phy_stats),
 }
 
@@ -102,13 +103,17 @@ class DumpTest(Base):
         f = self.read("-d", ps.read_registers_dump, "stats-e1000e.txt")
         self.assertEqual(f.value, fixture("stats-e1000e.txt"))
 
+    def test_ntuple_is_read_only_and_preserves_output(self):
+        f = ps.read_ntuple("eno1", run=self.run_for({("-n", "eno1"): (0, "RX rules: 2\n", "")}))
+        self.assertEqual(f.value, "RX rules: 2\n")
+
 
 class ErrorsTest(Base):
     def test_unsupported(self):
         for name, (flag, reader) in ARGS.items():
             with self.subTest(name):
                 out = reader("eno1", run=self.run_for({(flag, "eno1"): (1, "", fixture("unsupported.txt"))}))
-                if name in ("eeprom", "regs", "phy"):
+                if name in ("eeprom", "regs", "phy", "ntuple"):
                     self.assertFalse(out.supported)
                     self.assertTrue(out.reason)
                 elif name in ("coalesce", "features", "rss"):

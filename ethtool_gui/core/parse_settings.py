@@ -174,6 +174,11 @@ def read_rss(iface: str, run: Runner = run_ethtool) -> Rss:
     return Rss(raw=result.stdout, indirection=indirection, hash_key=key)
 
 
+def read_ntuple(iface: str, run: Runner = run_ethtool) -> Field[str]:
+    """Read the driver's RX classification rules without changing them."""
+    return _dump(iface, run, ["-n"])
+
+
 def _dump(iface: str, run: Runner, args: list[str]) -> Field[str]:
     result, reason = _fetch(iface, run, args)
     if reason is not None:

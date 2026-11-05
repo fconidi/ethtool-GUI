@@ -23,6 +23,7 @@ READERS = {
     "stats": stats.read_stats,
     "module": read_module,
     "rss": parse_settings.read_rss,
+    "ntuple": parse_settings.read_ntuple,
     "eeprom_dump": parse_settings.read_eeprom_dump,
     "registers_dump": parse_settings.read_registers_dump,
     "phy_stats": parse_settings.read_phy_stats,
