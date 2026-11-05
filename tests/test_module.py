@@ -99,5 +99,41 @@ class LevelTest(unittest.TestCase):
         self.assertIs(module.level(self.r(-99, warn_high=4.0)), Level.OK)
 
 
+class EdgeCaseTest(unittest.TestCase):
+    def test_no_light_is_minus_inf(self):
+        m = module.parse_module("\tReceiver signal average optical power : 0.0000 mW / -inf dBm\n"
+                                "\tLaser rx power low alarm threshold : 0.0050 mW / -23.01 dBm\n")
+        r = m.readings[0]
+        self.assertEqual((r.value, r.unit), (float("-inf"), "dBm"))
+        self.assertIs(module.level(r), Level.ALARM)
+
+    def test_minus_inf_alarm_and_no_thresholds(self):
+        inf = float("-inf")
+        self.assertIs(module.level(Reading("x", inf, "dBm", alarm_low=-23.0, threshold_unit="dBm")), Level.ALARM)
+        self.assertIs(module.level(Reading("x", inf, "dBm", warn_low=-20.0, threshold_unit="dBm")), Level.WARN)
+        self.assertIs(module.level(Reading("x", inf, "dBm")), Level.OK)
+
+    def test_unit_mismatch_is_ok(self):
+        m = module.parse_module("\tLaser output power : 0.0000 mW\n"
+                                "\tLaser output power low alarm threshold : 0.0501 mW / -13.00 dBm\n")
+        self.assertEqual(m.readings[0].unit, "mW")
+        self.assertIs(module.level(m.readings[0]), Level.OK)
+
+    def test_no_diagnostics(self):
+        m = module.parse_module("\tIdentifier : 0x03 (SFP)\n\tVendor name : FS\n\tVendor PN : X\n"
+                                "\tOptical diagnostics support : No\n")
+        self.assertEqual(m.readings, [])
+        self.assertEqual((m.vendor, m.part), ("FS", "X"))
+
+    def test_qsfp_channel_lines(self):
+        m = module.parse_module("\tIdentifier : 0x11 (QSFP28)\n"
+                                "\tLaser output power (Channel 1) : 0.5 mW / -3.01 dBm\n")
+        self.assertEqual(m.readings, [])
+
+    def test_garbage(self):
+        m = module.parse_module("\x00 garbage\n::\n\t:\n\tfoo\n")
+        self.assertEqual(m.readings, [])
+
+
 if __name__ == "__main__":
     unittest.main()

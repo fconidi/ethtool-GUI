@@ -52,5 +52,14 @@ class CableTestTest(ParseBase):
             cable.run_cable_test("eth9", run=run)
 
 
+    def test_unknown_status(self):
+        self.assertEqual(cable.parse_cable_test("Pair A code Unknown\n")[0].status, "Unknown")
+
+    def test_garbage(self):
+        self.assertEqual(cable.parse_cable_test("\x00 junk\nPair\nPair Z code\n"), [])
+        run = self.run_for({("--cable-test", "eth0"): (0, "garbage\n", "")})
+        self.assertEqual(cable.run_cable_test("eth0", run=run).pairs, [])
+
+
 if __name__ == "__main__":
     unittest.main()

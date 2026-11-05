@@ -25,6 +25,7 @@ class Reading:
     alarm_low: float | None = None
     warn_high: float | None = None
     alarm_high: float | None = None
+    threshold_unit: str | None = None
 
 
 @dataclass
@@ -63,7 +64,7 @@ def _number(value: str | None) -> tuple[float, str] | None:
     """Pick the figure to use: dBm if present, degrees C for temperature, else the first number."""
     if not value:
         return None
-    for pattern, unit in ((_NUM + r"\s*dBm", "dBm"), (_NUM + r"\s*degrees C", "C")):
+    for pattern, unit in ((r"(-?inf|" + _NUM[1:-1] + r")\s*dBm", "dBm"), (_NUM + r"\s*degrees C", "C")):
         m = re.search(pattern, value)
         if m:
             return float(m.group(1)), unit
@@ -90,11 +91,15 @@ def parse_module(text: str) -> ModuleInfo:
                             ("warn_high", "high warning"), ("warn_low", "low warning")):
             t = _number(pairs.get(f"{tname} {label} threshold"))
             setattr(r, attr, t[0] if t else None)
+            if t and r.threshold_unit is None:
+                r.threshold_unit = t[1]
         info.readings.append(r)
     return info
 
 
 def level(r: Reading) -> Level:
+    if r.threshold_unit is not None and r.threshold_unit != r.unit:
+        return Level.OK  # different units cannot be compared
     def beyond(low: float | None, high: float | None) -> bool:
         return (low is not None and r.value < low) or (high is not None and r.value > high)
 
