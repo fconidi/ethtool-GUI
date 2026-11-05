@@ -19,6 +19,7 @@ from .common import Env, PersistError, first_line
 from .detect import Backend
 from .request import Request, parse
 
+ETHTOOL = "/usr/sbin/ethtool"
 NMCLI = "/usr/bin/nmcli"
 UDEVADM = "/usr/bin/udevadm"
 LINK_DIR = Path("/etc/systemd/network")
@@ -31,7 +32,7 @@ MAX_LINE = 64 * 1024
 
 
 def run_tool(argv: list[str]) -> Result:
-    binary = {"nmcli": NMCLI, "udevadm": UDEVADM}[argv[0]]
+    binary = {"ethtool": ETHTOOL, "nmcli": NMCLI, "udevadm": UDEVADM}[argv[0]]
     return run_ethtool(argv[1:], binary=binary, timeout=TIMEOUT)
 
 
@@ -41,9 +42,14 @@ def _env() -> Env:
 
 def _status(req: Request, entry: dict | None, env: Env) -> dict:
     detected = detect.backend_for(req.iface, env.run, env.link_dir)
+    reason = None
+    if detected is Backend.NETWORKD and not networkd.permanent_mac(req.iface, env):
+        detected, reason = Backend.NONE, "no_permanent_mac"
     reply = {"ok": True, "backend": entry["backend"] if entry else detected.value,
              "detected": detected.value, "managed": entry is not None,
              "fields": entry["fields"] if entry else [], "values": entry["values"] if entry else {}}
+    if reason:
+        reply["reason"] = reason
     if entry and entry["backend"] == "nm":
         reply["persisted"] = nm.current(entry, env)
     elif entry:
@@ -64,12 +70,12 @@ def _persist(req: Request, entries: dict, env: Env) -> dict:
             committed.append(True)
         try:
             outcome = nm.persist(req.iface, req.values, env, entry, commit=commit)
-        except BaseException:
-            if committed:
-                state.save(STATE_FILE, entries)  # the change did not happen: back to before
-            raise
+        except PersistError as exc:
+            if committed and exc.unchanged:
+                state.save(STATE_FILE, entries)  # nmcli refused and nothing changed: back to before
+            raise  # otherwise keep the entry: it holds the true old values for "remove"
     elif detected is Backend.NETWORKD:
-        outcome = networkd.persist(req.iface, req.values, env, req.mac, entry)
+        outcome = networkd.persist(req.iface, req.values, env, entry)
     else:
         raise PersistError("no_backend")
     if outcome.written:

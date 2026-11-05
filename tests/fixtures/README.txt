@@ -19,3 +19,6 @@ features-e1000e.txt: synthetic: ethtool -k, e1000e style
 module-sfp.txt: synthetic: ethtool -m, SFP with diagnostics
 cable-test.txt: synthetic: ethtool --cable-test, one open pair
 rss-e1000e.txt: synthetic: ethtool -x, e1000e style
+udevadm-net-setup-link-ifnames0.stdout.txt: real: udevadm test-builtin net_setup_link, stdout, systemd 257, net.ifnames=0
+udevadm-net-setup-link-ifnames0.stderr.txt: real: udevadm test-builtin net_setup_link, stderr, systemd 257, net.ifnames=0, repeated warnings trimmed
+default-link.txt: real: /usr/lib/systemd/network/99-default.link, systemd 257, comments removed

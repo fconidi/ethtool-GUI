@@ -1,0 +1,39 @@
+Trying to open "/etc/systemd/hwdb/hwdb.bin"...
+Trying to open "/etc/udev/hwdb.bin"...
+Trying to open "/usr/lib/systemd/hwdb/hwdb.bin"...
+Trying to open "/usr/lib/udev/hwdb.bin"...
+=== trie on-disk ===
+tool version:          257
+file size:        14055849 bytes
+header size             80 bytes
+strings            2838905 bytes
+nodes             11216864 bytes
+Loading kernel module index.
+Loaded 'libkmod.so.2' via dlopen()
+Failed to read $container of PID 1, ignoring: Permission denied
+Found container virtualization none.
+Using default interface naming scheme 'v257'.
+Parsed configuration file "/usr/lib/systemd/network/99-default.link"
+Parsed configuration file "/usr/lib/systemd/network/80-vm-vt.link"
+Parsed configuration file "/usr/lib/systemd/network/80-iwd.link"
+Parsed configuration file "/usr/lib/systemd/network/80-container-vz.link"
+Parsed configuration file "/usr/lib/systemd/network/80-container-ve.link"
+Parsed configuration file "/usr/lib/systemd/network/80-container-vb.link"
+Parsed configuration file "/usr/lib/systemd/network/80-6rd-tunnel.link"
+Parsed configuration file "/usr/lib/systemd/network/73-usb-net-by-mac.link"
+/etc/systemd/network/10-rename-wlan0.link:3: Missing '=', ignoring line.
+/etc/systemd/network/10-rename-wlan0.link:8: Missing '=', ignoring line.
+/etc/systemd/network/10-rename-wlan0.link:13: Missing '=', ignoring line.
+Parsed configuration file "/etc/systemd/network/10-rename-wlan0.link"
+Created link configuration context.
+eth0: Device has name_assign_type=1
+eth0: Device has addr_assign_type=0
+eth0: Config file /usr/lib/systemd/network/99-default.link is applied
+eth0: Running in test mode, skipping application of ethtool settings.
+eth0: Running in test mode, skipping application of rtnl settings.
+Network interface NamePolicy= disabled on kernel command line.
+eth0: Policies didn't yield a name and Name= is not given, not renaming.
+eth0: Running in test mode, skipping application of SR-IOV settings.
+eth0: Running in test mode, skipping application of RPS setting.
+Unload kernel module index.
+Unloaded link configuration context.

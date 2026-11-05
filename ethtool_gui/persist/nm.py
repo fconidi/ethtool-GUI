@@ -89,7 +89,7 @@ def _settings(values: dict) -> tuple[list[tuple[str | None, str, str]], list[str
 
 def _read(uuid: str, prop: str, env: Env) -> str | None:
     """Current profile value of ``prop``; None if this nmcli does not know the property."""
-    result = call(env.run, ["nmcli", "-g", prop, "connection", "show", uuid])
+    result = call(env.run, ["nmcli", "-g", prop, "connection", "show", "uuid", uuid])
     if result.returncode != 0:
         if "invalid field" in result.stderr.lower():
             return None
@@ -101,7 +101,7 @@ def _read(uuid: str, prop: str, env: Env) -> str | None:
 
 
 def _modify(uuid: str, pairs: list[tuple[str, str]], env: Env) -> None:
-    argv = ["nmcli", "connection", "modify", uuid]
+    argv = ["nmcli", "connection", "modify", "uuid", uuid]
     for prop, value in pairs:
         argv += [prop, value]
     check(call(env.run, argv), "nmcli_failed")
@@ -119,7 +119,7 @@ def persist(iface: str, values: dict, env: Env, entry: dict | None = None,
     changes, unsupported = _settings(values)
     version = detect.nm_version(env.run) if changes else None
     previous = dict(entry["previous"]) if entry else {}
-    kept = []
+    kept, before = [], {}  # before: the profile's values right before this change
     for field, prop, value in changes:
         if not detect.prop_supported(prop, version):
             unsupported.append(field)
@@ -129,7 +129,9 @@ def persist(iface: str, values: dict, env: Env, entry: dict | None = None,
             if old is None:
                 unsupported.append(field)
                 continue
-            previous[prop] = old
+            previous[prop] = before[prop] = old
+        elif prop not in before:
+            before[prop] = _try_read(uuid, prop, env)
         kept.append((field, prop, value))
     unsupported = dedupe([f for f in unsupported if f is not None])
     written = dedupe([f for f, _, _ in kept if f is not None])
@@ -140,8 +142,23 @@ def persist(iface: str, values: dict, env: Env, entry: dict | None = None,
                  "previous": previous}
     if commit is not None:
         commit(new_entry)  # recorded first: a crash after the change still leaves the old values
-    _modify(uuid, [(prop, value) for _, prop, value in kept], env)
+    try:
+        _modify(uuid, [(prop, value) for _, prop, value in kept], env)
+    except PersistError as exc:
+        # Only a definite refusal (non-zero exit) with the profile re-read unchanged
+        # counts as "nothing happened"; a timeout or a lost tool may have applied it.
+        if exc.code == "nmcli_failed":
+            exc.unchanged = all(v is not None and _try_read(uuid, p, env) == v
+                                for p, v in before.items())
+        raise
     return Outcome(new_entry, written, unsupported)
+
+
+def _try_read(uuid: str, prop: str, env: Env) -> str | None:
+    try:
+        return _read(uuid, prop, env)
+    except PersistError:
+        return None
 
 
 def remove(entry: dict, env: Env) -> None:
@@ -149,7 +166,7 @@ def remove(entry: dict, env: Env) -> None:
     previous = entry["previous"]
     if not previous:
         return
-    argv = ["nmcli", "connection", "modify", entry["uuid"]]
+    argv = ["nmcli", "connection", "modify", "uuid", entry["uuid"]]
     for prop in sorted(previous):
         argv += [prop, previous[prop]]
     result = call(env.run, argv)

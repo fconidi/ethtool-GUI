@@ -1,7 +1,8 @@
 """Validation of the one request the persistence program accepts.
 
-``{"op": "status"|"persist"|"remove", "iface": str, "values": {...}, "permanent_mac": str}``;
-``values`` and ``permanent_mac`` only with ``persist``. The interface is checked
+``{"op": "status"|"persist"|"remove", "iface": str, "values": {...}}``; ``values``
+only with ``persist``. A ``permanent_mac`` sent along with ``persist`` is accepted
+for compatibility and ignored: the program reads the address itself. The interface is checked
 first, before anything else is looked at. Values go through the helper's own
 validators, so nothing reaches nmcli or a file that the helper would not accept.
 """
@@ -31,7 +32,6 @@ class Request:
     op: str
     iface: str
     values: dict
-    mac: str  # "" when the permanent address is unknown or zero
 
 
 def check_iface(iface: object, sys_root: Path) -> str:
@@ -77,6 +77,5 @@ def parse(obj: dict, sys_root: Path) -> Request:
     if not set(obj) <= FIELDS_BY_OP[op]:
         raise PersistError("bad_request", "unexpected field")
     if op != "persist":
-        return Request(op, iface, {}, "")
-    mac = validate_mac(obj.get("permanent_mac"))
-    return Request(op, iface, validate_values(obj.get("values")), mac)
+        return Request(op, iface, {})
+    return Request(op, iface, validate_values(obj.get("values")))

@@ -1,0 +1,3 @@
+ID_NET_LINK_FILE=/usr/lib/systemd/network/99-default.link
+ID_NET_LINK_FILE_DROPINS=
+ID_NET_NAME=eth0

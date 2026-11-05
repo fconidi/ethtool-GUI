@@ -1,8 +1,9 @@
 """systemd ``.link`` backend: ``<link_dir>/10-ethtool-gui-<iface>.link``.
 
 The file is built only from validated values and fixed key names, starts with
-the ``# ethtool-gui managed`` header, and matches the permanent MAC address (or
-``OriginalName=`` when there is none). Because only the first matching file is
+the ``# ethtool-gui managed`` header, and matches only the permanent MAC address,
+read here with ``ethtool -P`` (kernel names such as ``eth0`` are not stable
+across boots, so there is no fallback: no permanent MAC, no ``.link`` file). Because only the first matching file is
 applied, the naming keys of the file in use now (``99-default.link`` or our own
 earlier file) are carried over, and udev is asked before and after writing; on
 any doubt the previous state of the directory is put back and the change refused.
@@ -13,6 +14,8 @@ from __future__ import annotations
 import os
 
 from ..core.ifaces import valid_name
+from ..core.parse_basic import read_permanent_mac
+from ..core.runner import EthtoolError
 from . import udev
 from .common import (Env, Outcome, PersistConflict, PersistError, open_dir, read_file,
                      remove_file, write_file)
@@ -27,9 +30,9 @@ MODE = 0o644
 BITS = {10: "10M", 100: "100M", 1000: "1G", 2500: "2500M", 5000: "5G", 10000: "10G"}
 WOL = {"p": "phy", "u": "unicast", "m": "multicast", "b": "broadcast", "a": "arp",
        "g": "magic", "s": "secureon", "d": "off"}
-RING = {"rx": "ReceiveBufferSize", "tx": "TransmitBufferSize"}
+RING = {"rx": "RxBufferSize", "tx": "TxBufferSize"}
 OUR_KEYS = ("AutoNegotiation", "BitsPerSecond", "Duplex", "WakeOnLan",
-            "ReceiveBufferSize", "TransmitBufferSize")
+            "RxBufferSize", "TxBufferSize")
 NAMING = {
     "NamePolicy": frozenset({"kernel", "database", "onboard", "slot", "path", "mac", "keep"}),
     "AlternativeNamesPolicy": frozenset({"database", "onboard", "slot", "path", "mac"}),
@@ -97,9 +100,23 @@ def parse_naming(data: bytes, own: bool) -> dict[str, str]:
     return naming
 
 
-def render(iface: str, mac: str, naming: dict[str, str], keys: dict[str, str]) -> bytes:
-    match = f"PermanentMACAddress={mac}" if mac else f"OriginalName={iface}"
-    lines = [HEADER, "[Match]", match, "", "[Link]"]
+def permanent_mac(iface: str, env: Env) -> str:
+    """The NIC's permanent MAC from ``ethtool -P``; "" if empty, zero or unreadable."""
+    file_name(iface)  # validates the name
+    try:
+        field = read_permanent_mac(iface, run=lambda args: env.run(["ethtool", *args]))
+    except EthtoolError:
+        return ""
+    try:
+        return validate_mac(field.value) if field.supported and field.value else ""
+    except PersistError:
+        return ""
+
+
+def render(mac: str, naming: dict[str, str], keys: dict[str, str]) -> bytes:
+    if not mac:
+        raise PersistError("no_permanent_mac")
+    lines = [HEADER, "[Match]", f"PermanentMACAddress={mac}", "", "[Link]"]
     lines += [f"{k}={naming[k]}" for k in NAMING if k in naming]
     lines += [f"{k}={keys[k]}" for k in OUR_KEYS if k in keys]
     return ("\n".join(lines) + "\n").encode("utf-8")
@@ -125,12 +142,15 @@ def _naming_in_use(before: udev.Probe, ours: str, old: bytes | None, env: Env) -
     return parse_naming(data, own=False)
 
 
-def persist(iface: str, values: dict, env: Env, mac: str, entry: dict | None = None) -> Outcome:
-    values, mac = validate_values(values), validate_mac(mac)
+def persist(iface: str, values: dict, env: Env, entry: dict | None = None) -> Outcome:
+    values = validate_values(values)
     name = file_name(iface)
     _, written, unsupported = settings(values)
     if not written:
         return Outcome(entry, [], unsupported)
+    mac = permanent_mac(iface, env)
+    if not mac:
+        raise PersistError("no_permanent_mac")
     merged = merge(entry["values"] if entry else {}, subset(values, written))
     keys, _, _ = settings(merged)
     ours = str(env.link_dir / name)
@@ -141,14 +161,17 @@ def persist(iface: str, values: dict, env: Env, mac: str, entry: dict | None = N
             raise PersistError("foreign_file", name)
         before = udev.probe(iface, env)
         naming = _naming_in_use(before, ours, old, env)
-        write_file(fd, name, render(iface, mac, naming, keys), MODE)
-        try:
+        try:  # from the first byte written: any failure puts the directory back
+            write_file(fd, name, render(mac, naming, keys), MODE)
             udev.verify(before, udev.probe(iface, env), ours)
-        except BaseException:
-            if old is None:
-                remove_file(fd, name)
-            else:
-                write_file(fd, name, old, MODE)
+        except BaseException as exc:
+            try:
+                if old is None:
+                    remove_file(fd, name)
+                else:
+                    write_file(fd, name, old, MODE)
+            except Exception:
+                raise PersistError("io_error", "could not put the previous file back") from exc
             raise
     finally:
         os.close(fd)
@@ -156,7 +179,17 @@ def persist(iface: str, values: dict, env: Env, mac: str, entry: dict | None = N
     return Outcome(new_entry, written, unsupported)
 
 
+def _dir_missing(env: Env) -> bool:
+    try:
+        os.lstat(env.link_dir)
+    except FileNotFoundError:
+        return True
+    return False
+
+
 def present(iface: str, env: Env) -> bool:
+    if _dir_missing(env):
+        return False
     fd = open_dir(env.link_dir)
     try:
         data = read_file(fd, file_name(iface), MAX_BYTES)
@@ -168,6 +201,8 @@ def present(iface: str, env: Env) -> bool:
 def remove(iface: str, env: Env) -> bool:
     """Delete our file for ``iface`` if it carries the header; True if one was deleted."""
     name = file_name(iface)
+    if _dir_missing(env):
+        return False
     fd = open_dir(env.link_dir)
     try:
         data = read_file(fd, name, MAX_BYTES)

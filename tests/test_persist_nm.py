@@ -1,6 +1,7 @@
 import unittest
 from pathlib import Path
 
+from ethtool_gui.core.runner import EthtoolTimeout
 from ethtool_gui.persist import nm
 from ethtool_gui.persist.common import Env, PersistError
 from tests.fakes import FakeRunner
@@ -12,7 +13,9 @@ PREVIOUS = {ETH + "auto-negotiate": "no", ETH + "speed": "0", ETH + "duplex": ""
 FORCED = {"link": {"autoneg": False, "speed": 1000, "duplex": "full"}}
 
 
-def nm_runner(previous=None, version="1.52.0", modify=(0, "", ""), invalid=()):
+def nm_runner(previous=None, version="1.52.0", modify=(0, "", ""), invalid=(), after=None):
+    """Fake nmcli. ``modify`` is a reply or an exception; ``after`` updates the profile
+    values once a modify was attempted (as if it had partly happened)."""
     table = dict(PREVIOUS, **(previous or {}))
 
     def respond(argv):
@@ -20,11 +23,14 @@ def nm_runner(previous=None, version="1.52.0", modify=(0, "", ""), invalid=()):
             return 0, UUID + "\n", ""
         if argv == ["nmcli", "--version"]:
             return 0, f"nmcli tool, version {version}\n", ""
-        if argv[:2] == ["nmcli", "-g"] and argv[3:] == ["connection", "show", UUID]:
+        if argv[:2] == ["nmcli", "-g"] and argv[3:] == ["connection", "show", "uuid", UUID]:
             if argv[2] in invalid:
                 return 2, "", f"Error: invalid field '{argv[2]}'; allowed fields: ...\n"
             return 0, table.get(argv[2], "") + "\n", ""
-        if argv[:4] == ["nmcli", "connection", "modify", UUID]:
+        if argv[:5] == ["nmcli", "connection", "modify", "uuid", UUID]:
+            table.update(after or {})
+            if isinstance(modify, BaseException):
+                raise modify
             return modify
         return 99, "", "unexpected\n"
     return FakeRunner(respond)
@@ -39,7 +45,7 @@ def modifies(run):
 
 
 def pairs(argv):
-    return dict(zip(argv[4::2], argv[5::2]))
+    return dict(zip(argv[5::2], argv[6::2]))
 
 
 class PersistTest(unittest.TestCase):
@@ -47,7 +53,7 @@ class PersistTest(unittest.TestCase):
         run = nm_runner()
         nm.persist("eth0", FORCED, env(run))
         (cmd,) = modifies(run)
-        self.assertEqual(cmd[3], UUID)
+        self.assertEqual(cmd[3:5], ["uuid", UUID])
         for call in run.calls:
             if "connection" in call:
                 self.assertNotIn("eth0", call)
@@ -158,6 +164,32 @@ class PersistTest(unittest.TestCase):
         self.assertEqual(ctx.exception.code, "nmcli_failed")
         self.assertEqual(ctx.exception.reason, "Error: failed to modify 802-3-ethernet.speed: bad")
 
+    def test_profile_read_by_uuid_keyword(self):
+        run = nm_runner()
+        nm.persist("eth0", FORCED, env(run))
+        for call in run.calls:
+            if call[1:2] == ["-g"] and "connection" in call:
+                self.assertEqual(call[-2:], ["uuid", UUID])
+
+    def test_definite_failure_with_unchanged_profile_is_marked(self):
+        run = nm_runner(modify=(4, "", "Error: bad\n"))
+        with self.assertRaises(PersistError) as ctx:
+            nm.persist("eth0", FORCED, env(run))
+        self.assertTrue(ctx.exception.unchanged)
+
+    def test_definite_failure_with_changed_profile_is_not_marked(self):
+        run = nm_runner(modify=(4, "", "Error: bad\n"), after={ETH + "speed": "1000"})
+        with self.assertRaises(PersistError) as ctx:
+            nm.persist("eth0", FORCED, env(run))
+        self.assertFalse(ctx.exception.unchanged)
+
+    def test_timeout_is_never_marked_unchanged(self):
+        run = nm_runner(modify=EthtoolTimeout("nmcli timed out"))
+        with self.assertRaises(PersistError) as ctx:
+            nm.persist("eth0", FORCED, env(run))
+        self.assertEqual(ctx.exception.code, "timeout")
+        self.assertFalse(ctx.exception.unchanged)
+
     def test_profile_changed(self):
         entry = nm.persist("eth0", FORCED, env(nm_runner())).entry
         entry = dict(entry, uuid="00000000-0000-4000-8000-000000000000")
@@ -172,7 +204,7 @@ class RemoveTest(unittest.TestCase):
         run = nm_runner()
         nm.remove(entry, env(run))
         (cmd,) = modifies(run)
-        self.assertEqual(cmd[3], UUID)
+        self.assertEqual(cmd[3:5], ["uuid", UUID])
         self.assertEqual(pairs(cmd), {ETH + "auto-negotiate": "no", ETH + "speed": "0",
                                       ETH + "duplex": "", ETH + "wake-on-lan": "phy,magic"})
 

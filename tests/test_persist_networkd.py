@@ -5,9 +5,11 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from ethtool_gui.core.runner import EthtoolMissing, EthtoolTimeout
 from ethtool_gui.persist import common, networkd
 from ethtool_gui.persist.common import Env, PersistConflict, PersistError
 from tests.fakes import FakeRunner
+from tests.test_parse_basic import fixture
 
 MAC = "aa:bb:cc:00:11:22"
 DEFAULT = """# default
@@ -43,9 +45,19 @@ class Base(unittest.TestCase):
         self.ours = self.link_dir / "10-ethtool-gui-eth0.link"
         self.after = None  # override: text printed once our file exists
         self.before = None
+        self.mac_reply = (0, f"Permanent address: {MAC}\n", "")
+        self.udevadm_error = None  # exception raised by the n-th udevadm call: (n, exc)
         self.run = FakeRunner(self.respond)
 
+    def udevadm_calls(self):
+        return [c for c in self.run.calls if c[0] == "udevadm"]
+
     def respond(self, argv):
+        if argv == ["ethtool", "-P", "eth0"]:
+            return self.mac_reply
+        # the current call is already recorded: the n-th (0-based) call sees n + 1
+        if self.udevadm_error and len(self.udevadm_calls()) == self.udevadm_error[0] + 1:
+            raise self.udevadm_error[1]
         if argv != ["udevadm", "test-builtin", "net_setup_link", str(self.sys_root / "eth0")]:
             return 99, "", "unexpected\n"
         if self.ours.exists():
@@ -58,8 +70,8 @@ class Base(unittest.TestCase):
         return Env(run=self.run, link_dir=self.link_dir, sys_root=self.sys_root,
                    default_links=(str(self.default),))
 
-    def persist(self, values=FORCED, mac=MAC, entry=None):
-        return networkd.persist("eth0", values, self.env(), mac, entry)
+    def persist(self, values=FORCED, entry=None):
+        return networkd.persist("eth0", values, self.env(), entry)
 
     def refused(self, code, reason=None, **kw):
         with self.assertRaises(PersistError) as ctx:
@@ -79,13 +91,14 @@ class WriteTest(Base):
         self.assertIn("[Match]", lines)
         self.assertIn("PermanentMACAddress=aa:bb:cc:00:11:22", lines)
         for line in ("[Link]", "BitsPerSecond=1G", "Duplex=full", "AutoNegotiation=no",
-                     "WakeOnLan=magic", "ReceiveBufferSize=512", "TransmitBufferSize=1024",
+                     "WakeOnLan=magic", "RxBufferSize=512", "TxBufferSize=1024",
                      "NamePolicy=keep kernel database onboard slot path",
                      "AlternativeNamesPolicy=database onboard slot path mac",
                      "MACAddressPolicy=persistent"):
             self.assertIn(line, lines)
-        self.assertNotIn("Speed=", text)
-        self.assertNotIn("Autonegotiation=", text)
+        for wrong in ("Speed=", "Autonegotiation=", "ReceiveBufferSize", "TransmitBufferSize",
+                      "OriginalName"):
+            self.assertNotIn(wrong, text)
         self.assertEqual(stat.S_IMODE(self.ours.stat().st_mode), 0o644)
         self.assertEqual(sorted(out.written), sorted(["link.autoneg", "link.speed", "link.duplex",
                                                       "wol", "ring.rx", "ring.tx"]))
@@ -106,12 +119,21 @@ class WriteTest(Base):
         self.persist({"wol": {"wol": "d"}})
         self.assertIn("WakeOnLan=off", self.ours.read_text(encoding="utf-8"))
 
-    def test_zero_or_empty_mac_matches_original_name(self):
-        for mac in ("", "00:00:00:00:00:00"):
-            self.persist(mac=mac)
-            text = self.ours.read_text(encoding="utf-8")
-            self.assertIn("OriginalName=eth0", text)
-            self.assertNotIn("PermanentMACAddress", text)
+    def test_mac_read_with_ethtool(self):
+        self.mac_reply = (0, "Permanent address: AA:BB:CC:DD:EE:01\n", "")
+        self.persist()
+        self.assertIn("PermanentMACAddress=aa:bb:cc:dd:ee:01", self.ours.read_text(encoding="utf-8"))
+        self.assertEqual(self.run.calls[0], ["ethtool", "-P", "eth0"])
+
+    def test_no_permanent_mac_refused(self):
+        for reply in ((0, "Permanent address: 00:00:00:00:00:00\n", ""),
+                      (0, "Permanent address: \n", ""), (0, "", ""),
+                      (1, "", "Operation not supported\n"),
+                      (0, "Permanent address: 80:00:02:08:fe:80:00:00:00:00\n", "")):
+            self.mac_reply = reply
+            self.refused("no_permanent_mac")
+            self.assertEqual(os.listdir(self.link_dir), [])
+            self.assertEqual(self.udevadm_calls(), [])
 
     def test_unsupported_fields(self):
         values = {"pause": {"rx": True}, "features": {"gro": True}, "coalesce": {"rx-usecs": 1},
@@ -122,7 +144,7 @@ class WriteTest(Base):
         self.assertEqual(sorted(out.unsupported), sorted([
             "pause.rx", "features.generic-receive-offload", "coalesce.rx-usecs", "channels.rx",
             "eee", "ring.rx-mini", "ring.rx", "link.advertise"]))
-        self.assertNotIn("Receive", self.ours.read_text(encoding="utf-8"))
+        self.assertNotIn("BufferSize", self.ours.read_text(encoding="utf-8"))
 
     def test_nothing_supported_writes_nothing(self):
         out = self.persist({"eee": {"eee": True}})
@@ -134,7 +156,7 @@ class WriteTest(Base):
         first = self.persist({"ring": {"rx": 512}}).entry
         out = self.persist({"wol": {"wol": "g"}}, entry=first)
         text = self.ours.read_text(encoding="utf-8")
-        self.assertIn("ReceiveBufferSize=512", text)
+        self.assertIn("RxBufferSize=512", text)
         self.assertIn("WakeOnLan=magic", text)
         self.assertEqual(out.entry["values"], {"ring": {"rx": 512}, "wol": {"wol": "g"}})
         self.assertEqual(text.count("NamePolicy="), 1)  # naming copied from our own file
@@ -168,7 +190,7 @@ class ConflictTest(Base):
         self.before = "ID_NET_LINK_FILE=\n"
         self.refused("conflict", "cannot_verify")
         self.assertEqual(os.listdir(self.link_dir), [])
-        self.assertEqual(len(self.run.calls), 1)
+        self.assertEqual(len(self.udevadm_calls()), 1)
 
     def test_custom_link_file_in_use(self):
         self.before = LOG.format(path=str(self.link_dir / "70-custom.link"))
@@ -189,6 +211,8 @@ class ConflictTest(Base):
         calls = []
 
         def respond(argv):
+            if argv[0] == "ethtool":
+                return self.mac_reply
             calls.append(argv)
             if len(calls) == 1:
                 return 0, f"ID_NET_LINK_FILE={self.default}\n", LOG.format(path=self.default)
@@ -206,6 +230,113 @@ class ConflictTest(Base):
             self.persist({"wol": {"wol": "g"}}, entry=first)
         self.assertEqual(self.ours.read_bytes(), old)
         self.assertEqual(os.listdir(self.link_dir), [self.ours.name])
+
+
+    def test_udevadm_timeout_or_missing(self):
+        for n in (0, 1):  # before writing, and after
+            for exc, code in ((EthtoolTimeout("udevadm timed out"), "timeout"),
+                              (EthtoolMissing("udevadm: command not found"), "tool_missing")):
+                self.run.calls.clear()
+                self.udevadm_error = (n, exc)
+                self.refused(code)
+                self.assertEqual(os.listdir(self.link_dir), [])
+
+    def test_failure_after_rename_rolls_back(self):
+        real = os.fsync
+        seen = []
+
+        def fsync(fd):
+            seen.append(fd)
+            if len(seen) == 2:  # the directory, right after the rename
+                raise OSError(5, "Input/output error")
+            return real(fd)
+        with mock.patch("os.fsync", fsync), self.assertRaises(OSError):
+            self.persist()
+        self.assertEqual(os.listdir(self.link_dir), [])
+
+    def test_failure_after_rename_restores_previous_file(self):
+        first = self.persist({"ring": {"rx": 512}}).entry
+        old = self.ours.read_bytes()
+        real, seen = os.fsync, []
+
+        def fsync(fd):
+            seen.append(fd)
+            if len(seen) == 2:
+                raise OSError(5, "Input/output error")
+            return real(fd)
+        with mock.patch("os.fsync", fsync), self.assertRaises(OSError):
+            self.persist({"wol": {"wol": "g"}}, entry=first)
+        self.assertEqual(self.ours.read_bytes(), old)
+        self.assertEqual(os.listdir(self.link_dir), [self.ours.name])
+
+
+class RealOutputTest(Base):
+    """The captured output of a desktop with net.ifnames=0 (kernel names kept)."""
+
+    def setUp(self):
+        super().setUp()
+        self.default.write_text(fixture("default-link.txt"), encoding="utf-8")
+
+        def real(name):
+            return fixture(name).replace(
+                "/usr/lib/systemd/network/99-default.link", str(self.default)).replace(
+                "/etc/systemd/network/10-rename-wlan0.link", str(self.link_dir / "10-rename-wlan0.link"))
+        self.real_out = real("udevadm-net-setup-link-ifnames0.stdout.txt")
+        self.real_err = real("udevadm-net-setup-link-ifnames0.stderr.txt")
+        self.real = self.real_out  # stdout of the before-probe; the base class fakes the rest
+        self.before = self.real
+        self.after = self.real.replace(f"ID_NET_LINK_FILE={self.default}",
+                                       f"ID_NET_LINK_FILE={self.ours}")
+
+    def respond(self, argv):  # stdout as given, the real log on stderr
+        code, out, err = super().respond(argv)
+        if argv[0] != "udevadm" or code != 0:
+            return code, out, err
+        text = self.after if self.ours.exists() else self.before
+        log = self.real_err.replace(f"Config file {self.default} is applied",
+                                    f"Config file {self.ours} is applied") if self.ours.exists() else self.real_err
+        return 0, text, log
+
+    def test_parse_real_split(self):
+        from ethtool_gui.persist import udev
+        probe = udev.parse(self.real_out, self.real_err)
+        self.assertEqual((probe.link_file, probe.name, probe.dropins, probe.no_name),
+                         (str(self.default), "eth0", False, True))
+        fallback = udev.parse("", self.real_out)  # properties on stderr: fallback only
+        self.assertEqual((fallback.link_file, fallback.name), (probe.link_file, probe.name))
+        self.assertNotIn("ID_NET_", self.real_err)
+
+    def test_success_with_kernel_names(self):
+        out = self.persist()
+        self.assertIn("ring.rx", out.written)
+        self.assertIn("NamePolicy=keep kernel database onboard slot path",
+                      self.ours.read_text(encoding="utf-8"))
+
+    def test_name_changed(self):
+        self.after = self.after.replace("ID_NET_NAME=eth0", "ID_NET_NAME=enp3s0")
+        self.refused("conflict", "naming_changed")
+        self.assertEqual(os.listdir(self.link_dir), [])
+
+    def test_other_file_applied_after(self):
+        self.after = self.real.replace(f"ID_NET_LINK_FILE={self.default}",
+                                       f"ID_NET_LINK_FILE={self.link_dir}/05-other.link")
+        self.refused("conflict", "earlier_link_file")
+        self.assertEqual(os.listdir(self.link_dir), [])
+
+    def test_unrelated_admin_file_does_not_block(self):
+        admin = self.link_dir / "10-rename-wlan0.link"
+        admin.write_text("[Match]\nwlan0\n[Link]\nName=wlan0\n", encoding="utf-8")
+        before = admin.read_bytes()
+        self.persist()
+        self.assertEqual(admin.read_bytes(), before)
+        self.assertEqual(sorted(os.listdir(self.link_dir)), sorted([admin.name, self.ours.name]))
+        self.assertTrue(networkd.remove("eth0", self.env()))
+        self.assertEqual(os.listdir(self.link_dir), [admin.name])
+
+    def test_property_lines_are_required(self):
+        self.before = "\n".join(l for l in self.real.splitlines() if not l.startswith("ID_NET_LINK_FILE="))
+        self.refused("conflict", "cannot_verify")
+        self.assertEqual(os.listdir(self.link_dir), [])
 
 
 class UnsafePathTest(Base):
@@ -266,6 +397,11 @@ class RemoveTest(Base):
         with self.assertRaises(PersistError):
             networkd.remove("eth0", self.env())
         self.assertTrue(target.exists())
+
+    def test_missing_link_dir(self):
+        self.link_dir.rmdir()
+        self.assertFalse(networkd.remove("eth0", self.env()))
+        self.assertFalse(networkd.present("eth0", self.env()))
 
     def test_bad_name(self):
         for bad in ("-E", "..", "../x", "*"):

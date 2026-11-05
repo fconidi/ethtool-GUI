@@ -29,6 +29,8 @@ class PersistError(Exception):
     def __init__(self, code: str, reason: str | None = None) -> None:
         super().__init__(code if reason is None else f"{code}: {reason}")
         self.code, self.reason = code, reason
+        # Set by the NM backend: the tool failed for sure and the profile was re-read unchanged.
+        self.unchanged = False
 
 
 class PersistConflict(PersistError):

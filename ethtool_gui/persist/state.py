@@ -83,7 +83,9 @@ def _clean(iface: object, entry: object) -> dict:
         try:
             clean["mac"] = validate_mac(entry.get("mac"))
         except PersistError:
-            raise _state_error("malformed mac") from None
+            clean["mac"] = ""
+        if not clean["mac"]:
+            raise _state_error("malformed mac")
     else:
         raise _state_error("unknown backend")
     return clean

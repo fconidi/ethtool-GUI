@@ -10,6 +10,7 @@ from unittest import mock
 
 from ethtool_gui.persist import __main__ as program
 from ethtool_gui.persist import state
+from ethtool_gui.core.runner import EthtoolTimeout
 from tests.fakes import FakeRunner
 from tests.test_persist_networkd import DEFAULT, LOG
 from tests.test_persist_nm import ETH, UUID, nm_runner
@@ -30,6 +31,7 @@ class Base(unittest.TestCase):
         self.state_file = self.root / "lib" / "managed.json"
         self.ours = self.link_dir / "10-ethtool-gui-eth0.link"
         self.run = None
+        self.mac = "aa:bb:cc:00:11:22"
         patches = {"LINK_DIR": self.link_dir, "SYS_ROOT": self.sys_root,
                    "STATE_FILE": self.state_file, "DEFAULT_LINKS": (str(self.default),),
                    "run_tool": lambda argv: self.run(argv)}
@@ -42,6 +44,8 @@ class Base(unittest.TestCase):
         def respond(argv):
             if argv[0] == "nmcli":
                 return 0, "\n", ""  # no NetworkManager profile
+            if argv == ["ethtool", "-P", "eth0"]:
+                return 0, f"Permanent address: {self.mac}\n", ""
             if argv[:3] == ["udevadm", "test-builtin", "net_setup_link"]:
                 path = self.ours if self.ours.exists() else self.default
                 text = LOG.format(path=path)
@@ -91,8 +95,7 @@ class InputTest(Base):
         for request in ({"op": "bogus", "iface": "eth0"},
                         {"op": "status", "iface": "eth0", "values": {}},
                         {"op": "persist", "iface": "eth0", "values": {}, "extra": 1},
-                        {"op": "persist", "iface": "eth0", "values": {"wol": {"wol": "g"}},
-                         "permanent_mac": "zz"}):
+                        {"op": "status", "iface": "eth0", "permanent_mac": "aa:bb:cc:00:11:22"}):
             code, reply = self.call(request)
             self.assertEqual(reply["error"], "bad_request", request)
 
@@ -131,7 +134,7 @@ class NmProgramTest(Base):
         code, reply = self.call({"op": "remove", "iface": "eth0"})
         self.assertEqual((code, reply["ok"]), (0, True))
         modify = [c for c in self.run.calls if c[:3] == ["nmcli", "connection", "modify"]]
-        self.assertEqual(modify, [["nmcli", "connection", "modify", UUID,
+        self.assertEqual(modify, [["nmcli", "connection", "modify", "uuid", UUID,
                                    ETH + "auto-negotiate", "no", ETH + "duplex", "",
                                    ETH + "speed", "0"]])
         self.assertEqual(state.load(self.state_file), {})
@@ -142,7 +145,30 @@ class NmProgramTest(Base):
         self.run = nm_runner(modify=(4, "", "Error: boom\nsecond\n"))
         code, reply = self.call({"op": "persist", "iface": "eth0", "values": {"wol": {"wol": "g"}}})
         self.assertEqual(reply, {"ok": False, "error": "nmcli_failed", "reason": "Error: boom"})
-        self.assertEqual(state.load(self.state_file), {})  # recorded before, rolled back after
+        self.assertEqual(state.load(self.state_file), {})  # refused, re-read unchanged: rolled back
+
+    def test_definite_failure_with_changed_profile_keeps_entry(self):
+        self.run = nm_runner(modify=(4, "", "Error: boom\n"), after={ETH + "speed": "100"})
+        self.call({"op": "persist", "iface": "eth0", "values": {
+            "link": {"autoneg": False, "speed": 100, "duplex": "full"}}})
+        self.assertEqual(state.load(self.state_file)["eth0"]["previous"][ETH + "speed"], "0")
+
+    def test_timeout_keeps_entry_and_remove_restores(self):
+        self.run = nm_runner(modify=EthtoolTimeout("nmcli timed out"))
+        code, reply = self.call({"op": "persist", "iface": "eth0", "values": {
+            "link": {"autoneg": False, "speed": 100, "duplex": "full"}}})
+        self.assertEqual(reply["error"], "timeout")
+        entry = state.load(self.state_file)["eth0"]
+        self.assertEqual(entry["previous"], {ETH + "auto-negotiate": "no", ETH + "speed": "0",
+                                             ETH + "duplex": ""})
+        self.run = nm_runner()
+        code, reply = self.call({"op": "remove", "iface": "eth0"})
+        self.assertTrue(reply["ok"])
+        modify = [c for c in self.run.calls if c[:3] == ["nmcli", "connection", "modify"]]
+        self.assertEqual(modify, [["nmcli", "connection", "modify", "uuid", UUID,
+                                   ETH + "auto-negotiate", "no", ETH + "duplex", "",
+                                   ETH + "speed", "0"]])
+        self.assertEqual(state.load(self.state_file), {})
 
     def test_state_symlink_refused(self):
         self.state_file.parent.mkdir(mode=0o700)
@@ -185,10 +211,41 @@ class NetworkdProgramTest(Base):
         self.assertEqual(reply, {"ok": True, "backend": "networkd", "removed": ["link.autoneg"]})
         self.assertEqual(os.listdir(self.link_dir), [foreign.name])
 
+    def test_request_mac_ignored(self):
+        code, reply = self.call({"op": "persist", "iface": "eth0", "permanent_mac": "02:00:00:00:00:99",
+                                 "values": {"wol": {"wol": "g"}}})
+        self.assertTrue(reply["ok"])
+        text = self.ours.read_text(encoding="utf-8")
+        self.assertIn("PermanentMACAddress=aa:bb:cc:00:11:22", text)
+        self.assertNotIn("02:00:00:00:00:99", text)
+
+    def test_zero_mac(self):
+        for mac in ("00:00:00:00:00:00", ""):
+            self.mac = mac
+            code, reply = self.call({"op": "persist", "iface": "eth0", "permanent_mac": "aa:bb:cc:00:11:22",
+                                     "values": {"wol": {"wol": "g"}}})
+            self.assertEqual(reply["error"], "no_permanent_mac")
+            self.assertEqual(os.listdir(self.link_dir), [])
+            code, reply = self.call({"op": "status", "iface": "eth0"})
+            self.assertEqual((reply["detected"], reply["reason"]), ("none", "no_permanent_mac"))
+
+    def test_status_with_file_missing(self):
+        self.call({"op": "persist", "iface": "eth0", "values": {"wol": {"wol": "g"}}})
+        self.ours.unlink()
+        code, reply = self.call({"op": "status", "iface": "eth0"})
+        self.assertEqual((reply["ok"], reply["managed"], reply["file"]), (True, True, False))
+
+    def test_remove_without_entry_or_link_dir(self):
+        self.link_dir.rmdir()
+        code, reply = self.call({"op": "remove", "iface": "eth0"})
+        self.assertEqual(reply["error"], "not_managed")
+
     def test_conflict_reply(self):
         def respond(argv):
             if argv[0] == "nmcli":
                 return 0, "", ""
+            if argv[0] == "ethtool":
+                return 0, f"Permanent address: {self.mac}\n", ""
             path = self.link_dir / "05-other.link" if self.ours.exists() else self.default
             return 0, f"ID_NET_LINK_FILE={path}\n", ""
         self.run = FakeRunner(respond)

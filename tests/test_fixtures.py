@@ -10,6 +10,8 @@ NAMES = [
     "nodevice.txt", "unsupported.txt", "stats-e1000e.txt", "pause-e1000e.txt",
     "ring-e1000e.txt", "channels-e1000e.txt", "coalesce-e1000e.txt",
     "features-e1000e.txt", "module-sfp.txt", "cable-test.txt", "rss-e1000e.txt",
+    "udevadm-net-setup-link-ifnames0.stdout.txt",
+    "udevadm-net-setup-link-ifnames0.stderr.txt", "default-link.txt",
 ]
 
 
