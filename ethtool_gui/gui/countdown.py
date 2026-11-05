@@ -46,7 +46,8 @@ class KeepBar(Gtk.Box):
         self._token = token
         self._deadline = time.monotonic() + max(0.0, float(seconds))
         self._tick()
-        self.show_all()
+        for child in self.get_children():
+            child.show_all()
         self.show()
         self._timer = GLib.timeout_add(100, self._tick)
 

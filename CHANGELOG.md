@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.3
+
+- Fixed hidden Keep, Keep and save, and Revert buttons in link-change confirmation.
+
 ## 0.1.2
 
 - Disabled manual speed and duplex controls while auto-negotiation is active.
