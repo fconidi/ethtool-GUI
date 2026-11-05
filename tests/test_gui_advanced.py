@@ -79,6 +79,24 @@ class AdvancedTest(unittest.TestCase):
         tab.speed.set_active_id("100")
         self.assertEqual(tab.collect(), {"autoneg": False, "speed": 100, "duplex": "full"})
 
+    def test_older_link_read_cannot_replace_newer_result(self):
+        page = AdvancedPage(lambda *a, **k: None, lambda **k: {})
+        self.addCleanup(page.destroy)
+        page.show_all()
+        page._iface = "eth0"
+        callbacks = []
+        with mock.patch("ethtool_gui.gui.advanced_page.thread_runner",
+                        side_effect=lambda _work, done: callbacks.append(done)):
+            page.refresh()
+            page.refresh()
+        manual = LinkInfo(autoneg=Field(False), speed_mbps=Field(100), duplex=Field("Full"))
+        automatic = LinkInfo(autoneg=Field(True), speed_mbps=Field(1000), duplex=Field("Full"))
+        callbacks[1](automatic, None)
+        callbacks[0](manual, None)
+        self.assertTrue(page.tabs[0].autoneg.get_active())
+        self.assertEqual(page.tabs[0].speed.get_active_id(), "1000")
+        self.assertFalse(page.tabs[0].speed.get_sensitive())
+
     def test_fixed_offload_is_disabled(self):
         tab = OffloadTab()
         self.addCleanup(tab.destroy)

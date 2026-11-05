@@ -120,6 +120,8 @@ class MainWindow(Gtk.ApplicationWindow):
                 self.simple_page._message(_("confirm_pending_change"))
                 return
             self.stack.set_visible_child_name(mode)
+            if mode == "advanced":
+                self.advanced_page.refresh()
             self.refresh()
 
     # -- interface list and selection -------------------------------------

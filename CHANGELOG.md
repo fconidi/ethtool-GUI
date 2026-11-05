@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.4
+
+- Refreshed Advanced link controls when returning from Simple.
+- Ignored older Advanced reads when a newer reading is available.
+
 ## 0.1.3
 
 - Fixed hidden Keep, Keep and save, and Revert buttons in link-change confirmation.

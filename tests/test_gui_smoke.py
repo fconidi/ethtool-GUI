@@ -3,6 +3,7 @@ import threading
 import unittest
 from pathlib import Path
 import tempfile
+from unittest import mock
 
 import gi
 
@@ -99,6 +100,11 @@ class WindowTest(unittest.TestCase):
         self.window._busy = True
         self.window.mode_buttons["advanced"].set_active(True)
         self.assertTrue(self.window._refresh_requested)
+
+    def test_returning_to_advanced_reloads_link_controls(self):
+        self.window.advanced_page.refresh = mock.Mock()
+        self.window.mode_buttons["advanced"].set_active(True)
+        self.window.advanced_page.refresh.assert_called_once_with()
 
     def test_pending_simple_change_keeps_confirmation_visible(self):
         self.window.simple_page.keep_bar.begin("b" * 16, 15)

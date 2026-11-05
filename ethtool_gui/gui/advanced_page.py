@@ -44,6 +44,7 @@ class AdvancedPage(Gtk.Box):
         self._update_wol = update_wol
         self._on_change = on_change
         self._iface: str | None = None
+        self._refresh_serial = 0
         self._busy = False
         self._pending: tuple[str, dict] | None = None
         self.needs_authorization = False
@@ -102,13 +103,16 @@ class AdvancedPage(Gtk.Box):
     def refresh(self) -> None:
         if not self._iface:
             return
+        self._refresh_serial += 1
+        serial = self._refresh_serial
         tab = self.tabs[self.notebook.get_current_page()]
         if not hasattr(tab, "load"):
             return
         iface = self._iface
 
         def done(data, error):
-            if iface != self._iface or tab is not self.tabs[self.notebook.get_current_page()]:
+            if (serial != self._refresh_serial or iface != self._iface
+                    or tab is not self.tabs[self.notebook.get_current_page()]):
                 return
             if error:
                 tab.unavailable(str(error))
