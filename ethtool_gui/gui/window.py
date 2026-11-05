@@ -20,6 +20,7 @@ from .common import needs_authorization  # noqa: E402
 from .helper_client import HelperClient  # noqa: E402
 from .iface_list import IfaceList, sysfs_speed  # noqa: E402
 from .pages import PlaceholderPage  # noqa: E402
+from .advanced_page import AdvancedPage  # noqa: E402
 from .simple_page import SimplePage  # noqa: E402
 from .common import persist_call  # noqa: E402
 
@@ -65,7 +66,7 @@ class MainWindow(Gtk.ApplicationWindow):
         body.pack_start(content, True, True, 0)
         self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
         self.simple_page = SimplePage(self.helper_call, persist_call)
-        self.advanced_page = PlaceholderPage()
+        self.advanced_page = AdvancedPage(self.helper_call, persist_call)
         self.stack.add_named(self.simple_page, "simple")
         self.stack.add_named(self.advanced_page, "advanced")
         self.stack.show_all()
@@ -175,6 +176,7 @@ class MainWindow(Gtk.ApplicationWindow):
     def _on_tick(self) -> bool:
         for event in self.poll_helper_events():
             self.simple_page.on_helper_event(event)
+            self.advanced_page.on_helper_event(event)
         self.refresh()
         return True
 

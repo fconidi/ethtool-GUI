@@ -60,4 +60,3 @@ class KeepBar(Gtk.Box):
             self._timer = 0
         self._token = None
         self.hide()
-

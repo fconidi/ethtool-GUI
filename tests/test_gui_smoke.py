@@ -118,6 +118,7 @@ class WindowTest(unittest.TestCase):
     def test_permission_failure_marks_page_as_needing_authorization(self):
         from ethtool_gui.core.models import LinkInfo
         self.window.iface_list.select("eth0")
+        self.assertTrue(pump(lambda: not self.window._busy))
         self.window.reader = lambda n: {"link": LinkInfo.unsupported("Operation not permitted")}
         self.window.refresh()
         self.assertTrue(pump(lambda: self.window.simple_page.needs_authorization))
