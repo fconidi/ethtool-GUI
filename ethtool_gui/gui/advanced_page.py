@@ -25,6 +25,7 @@ from .tabs.link import LinkTab  # noqa: E402
 from .tabs.offload import OffloadTab  # noqa: E402
 from .tabs.persistence import PersistenceTab  # noqa: E402
 from .tabs.settings import SettingsTab  # noqa: E402
+from .tabs.stats import StatsTab  # noqa: E402
 from .tabs.snapshot import SnapshotTab  # noqa: E402
 from .tabs.tools import DumpTab, TestTab  # noqa: E402
 
@@ -42,7 +43,7 @@ class AdvancedPage(Gtk.Box):
         self.needs_authorization = False
         self.notebook = Gtk.Notebook(scrollable=True)
         self.tabs = [
-            LinkTab(self.apply_change), TextTab(read_driver), TextTab(read_stats),
+            LinkTab(self.apply_change), TextTab(read_driver), StatsTab(),
             SettingsTab(("pause", "ring", "channels"), self.apply_change),
             SettingsTab(("coalesce",), self.apply_change), OffloadTab(self.apply_change),
             SettingsTab(("eee", "wol"), self.apply_change),
@@ -87,6 +88,9 @@ class AdvancedPage(Gtk.Box):
             self.tabs[12].current["link"] = values["link"]
         else:
             self.tabs[12].current.pop("link", None)
+        stats = reading.get("stats")
+        if stats is not None and self.notebook.get_current_page() == 2:
+            self.tabs[2].show_stats(stats)
 
     def refresh(self) -> None:
         if not self._iface:

@@ -16,9 +16,12 @@ from ..core.diagnosis import diagnose  # noqa: E402
 from ..core.ifaces import Iface  # noqa: E402
 from ..core.models import LinkInfo  # noqa: E402
 from ..core.stats import RateTracker, Stats, group_of  # noqa: E402
+from ..core.cable import PairResult  # noqa: E402
 from ..i18n import translate as _  # noqa: E402
 from .common import confirm_dialog, error_text, thread_runner  # noqa: E402
 from .countdown import KeepBar  # noqa: E402
+from .graph import RateGraph  # noqa: E402
+from .cable_view import CableView  # noqa: E402
 
 
 def _default_route(iface: str) -> bool:
@@ -57,6 +60,8 @@ class SimplePage(Gtk.Box):
         self.hint = Gtk.Label(xalign=0, wrap=True)
         for label in (self.status, self.speed, self.duplex, self.errors, self.hint):
             self.pack_start(label, False, False, 0)
+        self.graph = RateGraph()
+        self.pack_start(self.graph, False, False, 0)
 
         controls = Gtk.Grid(row_spacing=12, column_spacing=18)
         self.autoneg_switch = Gtk.Switch()
@@ -77,6 +82,9 @@ class SimplePage(Gtk.Box):
         actions.pack_start(self.blink_button, False, False, 0)
         actions.pack_start(self.cable_button, False, False, 0)
         self.pack_start(actions, False, False, 0)
+        self.cable_view = CableView()
+        self.cable_view.set_no_show_all(True)
+        self.pack_start(self.cable_view, False, False, 0)
 
         self.keep_bar = KeepBar(lambda: self._keep(False), lambda: self._keep(True), self._revert)
         self.pack_start(self.keep_bar, False, False, 0)
@@ -94,6 +102,9 @@ class SimplePage(Gtk.Box):
         if name != self._iface:
             self._rates = RateTracker()
             self._link = None
+            self.graph.history.clear()
+            self.graph.queue_draw()
+            self.cable_view.hide()
         self._iface = name
         self.title.set_text(_("select_iface_hint_named", name=name) if name else _("select_iface_hint"))
         self._updating = True
@@ -115,6 +126,7 @@ class SimplePage(Gtk.Box):
         self.duplex.set_text(_("duplex_label", value=link.duplex.value or _("unknown")))
         stats = reading.get("stats")
         rates = self._rates.update(stats.values, time.monotonic()) if isinstance(stats, Stats) and stats.supported else {}
+        self.graph.push(rates)
         error_rate = sum(value for key, value in rates.items() if group_of(key) in ("errors", "drops"))
         self.errors.set_text(_("error_rate", value=f"{error_rate:.1f}"))
         hints = diagnose(link, rates, None, None)
@@ -195,8 +207,17 @@ class SimplePage(Gtk.Box):
 
     def _on_cable(self, *_args) -> None:
         if self._iface and self.ask_confirmation(_("cable_warning"), True):
-            self._run("cable_test", lambda _reply: self._message(_("cable_done")),
+            self._run("cable_test", self._show_cable,
                       iface=self._iface, confirmed=True)
+
+    def _show_cable(self, reply: dict) -> None:
+        data = reply.get("data") or {}
+        if data.get("supported") is False:
+            self._message(data.get("reason") or _("cable_unsupported"))
+            return
+        self.cable_view.set_results([PairResult(**pair) for pair in data.get("pairs", [])])
+        self.cable_view.show()
+        self._message(_("cable_done"))
 
     def _keep(self, save: bool) -> None:
         token, iface, values = self.keep_bar.token, self._pending_iface, self._pending_values

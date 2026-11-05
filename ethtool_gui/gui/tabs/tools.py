@@ -8,6 +8,8 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
 from ...core.parse_settings import read_eeprom_dump, read_phy_stats, read_registers_dump  # noqa: E402
+from ...core.cable import PairResult  # noqa: E402
+from ..cable_view import CableView  # noqa: E402
 from .base import Topic, scroll  # noqa: E402
 
 
@@ -28,15 +30,23 @@ class TestTab(Topic):
         self.pack_start(buttons, False, False, 0)
         self.output = Gtk.TextView(editable=False, monospace=True)
         self.pack_start(scroll(self.output), True, True, 0)
+        self.cable_view = CableView()
+        self.cable_view.set_no_show_all(True)
+        self.pack_start(self.cable_view, False, False, 0)
 
     def _run(self, _button, cmd: str, args: dict, risky: bool) -> None:
         if not self.iface or (risky and not self.confirm("This test can interrupt the link. Continue?", True)):
             return
         from ..common import thread_runner
         iface = self.iface
-        thread_runner(lambda: self.call(cmd, iface=iface, **args),
-                      lambda result, error: self.output.get_buffer().set_text(
-                          str(error) if error else str(result)))
+        def done(result, error):
+            self.output.get_buffer().set_text(str(error) if error else str(result))
+            if not error and cmd == "cable_test":
+                data = result.get("data") or {}
+                self.cable_view.set_results([PairResult(**pair) for pair in data.get("pairs", [])])
+                self.cable_view.show()
+
+        thread_runner(lambda: self.call(cmd, iface=iface, **args), done)
 
 
 class DumpTab(Topic):
