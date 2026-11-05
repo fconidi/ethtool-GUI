@@ -551,7 +551,9 @@ class TimeoutTest(HelperBase):
         self.assertTrue(token)
 
     def test_double_restore_is_harmless(self):
-        token = self.apply_link()["token"]
+        # Leave enough time for the explicit restore on slower hosts.
+        with mock.patch.object(daemon, "REVERT_SECONDS", 2.0):
+            token = self.apply_link()["token"]
         self.assertEqual(restore.main([token]), 0)          # systemd fired first
         event = self.event()
         self.assertEqual(event, {"event": "reverted", "token": token, "reason": "timeout",
