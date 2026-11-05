@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import subprocess
 from typing import Callable
 
 import gi
@@ -11,6 +12,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
 from ..core.models import DriverInfo, LinkInfo  # noqa: E402
+from ..core.protocol import encode_message, iter_messages  # noqa: E402
 from ..i18n import translate as _  # noqa: E402
 from .helper_client import HelperError  # noqa: E402
 
@@ -67,3 +69,20 @@ def thread_runner(work: Callable[[], object], done: Callable[[object, Exception 
         GLib.idle_add(lambda: (done(result, error), False)[1])
 
     threading.Thread(target=target, daemon=True).start()
+
+
+def persist_call(**request) -> dict:
+    """Send one request to the separate, short-lived persistence program."""
+    try:
+        proc = subprocess.run(["pkexec", "/usr/lib/ethtool-gui/ethtool-gui-persist"],
+                              input=encode_message(request), capture_output=True, timeout=30, check=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise HelperError("persist_unavailable", str(exc)) from exc
+    if proc.returncode in (126, 127):
+        raise HelperError("access_denied")
+    from io import BytesIO
+    reply = next(iter_messages(BytesIO(proc.stdout)), None)
+    if not reply or not reply.get("ok"):
+        raise HelperError(str((reply or {}).get("error", "persist_error")),
+                          (reply or {}).get("reason"))
+    return reply

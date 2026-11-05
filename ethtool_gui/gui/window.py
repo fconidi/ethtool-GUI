@@ -13,18 +13,21 @@ from gi.repository import GLib, Gtk  # noqa: E402
 from ..core.ifaces import Iface, list_interfaces  # noqa: E402
 from ..core.parse_basic import read_driver, read_link  # noqa: E402
 from ..core.runner import EthtoolMissing  # noqa: E402
+from ..core.stats import read_stats  # noqa: E402
 from ..i18n import translate as _  # noqa: E402
 from . import style  # noqa: E402
 from .common import needs_authorization  # noqa: E402
 from .helper_client import HelperClient  # noqa: E402
 from .iface_list import IfaceList, sysfs_speed  # noqa: E402
 from .pages import PlaceholderPage  # noqa: E402
+from .simple_page import SimplePage  # noqa: E402
+from .common import persist_call  # noqa: E402
 
 REFRESH_MS = 2000
 
 
 def default_reader(name: str) -> dict:
-    return {"link": read_link(name), "driver": read_driver(name)}
+    return {"link": read_link(name), "driver": read_driver(name), "stats": read_stats(name)}
 
 
 class MainWindow(Gtk.ApplicationWindow):
@@ -61,7 +64,7 @@ class MainWindow(Gtk.ApplicationWindow):
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, margin=14)
         body.pack_start(content, True, True, 0)
         self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
-        self.simple_page = PlaceholderPage()
+        self.simple_page = SimplePage(self.helper_call, persist_call)
         self.advanced_page = PlaceholderPage()
         self.stack.add_named(self.simple_page, "simple")
         self.stack.add_named(self.advanced_page, "advanced")
@@ -170,6 +173,8 @@ class MainWindow(Gtk.ApplicationWindow):
             self._timer = 0
 
     def _on_tick(self) -> bool:
+        for event in self.poll_helper_events():
+            self.simple_page.on_helper_event(event)
         self.refresh()
         return True
 
