@@ -29,7 +29,18 @@ class I18nTest(unittest.TestCase):
         self.assertTrue(CATALOG["it"]["diag.low_speed"].startswith("Possibile"))
 
     def test_catalogs_have_same_keys(self):
-        self.assertEqual(set(CATALOG["en"]), set(CATALOG["it"]))
+        for lang in ("it", "fr", "de", "es"):
+            self.assertEqual(set(CATALOG["en"]), set(CATALOG[lang]), lang)
+
+    def test_language_selection_and_unknown_fallback(self):
+        from unittest.mock import patch
+        from ethtool_gui.i18n import current_language
+
+        for lang in ("fr", "de", "es"):
+            with patch.dict("os.environ", {"LANGUAGE": "", "LC_ALL": "", "LC_MESSAGES": "", "LANG": f"{lang}_XX.UTF-8"}):
+                self.assertEqual(current_language(), lang)
+        with patch.dict("os.environ", {"LANGUAGE": "", "LC_ALL": "", "LC_MESSAGES": "", "LANG": "zz_ZZ.UTF-8"}):
+            self.assertEqual(current_language(), "en")
 
     def test_fallbacks_and_fields(self):
         self.assertEqual(translate("show_all", lang="xx"), CATALOG["en"]["show_all"])
