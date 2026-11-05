@@ -65,6 +65,20 @@ class AdvancedTest(unittest.TestCase):
         tab.mode_checks["100baseT/Full"].set_active(True)
         self.assertEqual(tab.collect(), {"autoneg": True, "advertise": "0x28"})
 
+    def test_manual_speed_requires_autoneg_off(self):
+        tab = LinkTab()
+        self.addCleanup(tab.destroy)
+        tab.render(LinkInfo(autoneg=Field(True), speed_mbps=Field(1000), duplex=Field("Full"),
+                            supported_modes=Field(["100baseT/Full", "1000baseT/Full"]),
+                            advertised_modes=Field(["100baseT/Full", "1000baseT/Full"])))
+        self.assertFalse(tab.speed.get_sensitive())
+        self.assertFalse(tab.duplex.get_sensitive())
+        self.assertEqual(tab.collect(), {})
+        tab.autoneg.set_active(False)
+        self.assertTrue(tab.speed.get_sensitive())
+        tab.speed.set_active_id("100")
+        self.assertEqual(tab.collect(), {"autoneg": False, "speed": 100, "duplex": "full"})
+
     def test_fixed_offload_is_disabled(self):
         tab = OffloadTab()
         self.addCleanup(tab.destroy)

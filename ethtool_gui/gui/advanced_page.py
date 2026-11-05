@@ -38,10 +38,11 @@ class AdvancedPage(Gtk.Box):
                 "tab_tests", "tab_dump", "tab_snapshot", "tab_persistence"]
 
     def __init__(self, helper_call, persist_call, *, authorize_wol=None, read_wol=None,
-                 update_wol=None) -> None:
+                 update_wol=None, on_change=None) -> None:
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         self._helper_call, self._persist_call = helper_call, persist_call
         self._update_wol = update_wol
+        self._on_change = on_change
         self._iface: str | None = None
         self._busy = False
         self._pending: tuple[str, dict] | None = None
@@ -117,7 +118,10 @@ class AdvancedPage(Gtk.Box):
         thread_runner(lambda: tab.load(iface), done)
 
     def apply_change(self, iface: str, op: str, values: dict, *, save: bool = False) -> None:
-        if self._busy or not values or iface != self._iface:
+        if self._busy or iface != self._iface:
+            return
+        if not values:
+            self._message(_("no_changes"))
             return
         risky = OPS[op].is_link_affecting
         if risky:
@@ -144,6 +148,8 @@ class AdvancedPage(Gtk.Box):
                 if save:
                     thread_runner(lambda: self._persist_call(op="persist", iface=iface, values={op: values}),
                                   lambda _result, exc: self._message(error_text(exc) if exc else _("saved_for_boot")))
+            if not error and self._on_change:
+                self._on_change()
             self.refresh()
 
         thread_runner(lambda: self._helper_call("apply", iface=iface, op=op, values=values), done)

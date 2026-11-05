@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2
+
+- Disabled manual speed and duplex controls while auto-negotiation is active.
+- Refreshed link status when switching views and after applying Advanced changes.
+- Kept pending link-change confirmation visible until kept or reverted.
+
 ## 0.1.1
 
 - Fixed Advanced pages staying empty after switching tabs.

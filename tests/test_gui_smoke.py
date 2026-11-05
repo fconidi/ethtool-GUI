@@ -84,6 +84,26 @@ class WindowTest(unittest.TestCase):
         self.assertEqual(stack.get_visible_child_name(), "simple")
         self.assertIs(stack.get_child_by_name("simple"), self.window.simple_page)
 
+    def test_pending_advanced_change_keeps_confirmation_visible(self):
+        self.window.mode_buttons["advanced"].set_active(True)
+        self.window.advanced_page.keep_bar.begin("a" * 16, 15)
+        self.window.mode_buttons["simple"].set_active(True)
+        self.assertEqual(self.window.stack.get_visible_child_name(), "advanced")
+        self.assertTrue(self.window.advanced_page.keep_bar.get_visible())
+        self.window.advanced_page.keep_bar.end()
+
+    def test_mode_switch_requests_a_fresh_read_while_reader_is_busy(self):
+        self.window._busy = True
+        self.window.mode_buttons["advanced"].set_active(True)
+        self.assertTrue(self.window._refresh_requested)
+
+    def test_pending_simple_change_keeps_confirmation_visible(self):
+        self.window.simple_page.keep_bar.begin("b" * 16, 15)
+        self.window.mode_buttons["advanced"].set_active(True)
+        self.assertEqual(self.window.stack.get_visible_child_name(), "simple")
+        self.assertTrue(self.window.simple_page.keep_bar.get_visible())
+        self.window.simple_page.keep_bar.end()
+
     def test_selecting_an_interface_notifies_pages(self):
         seen = []
         self.window.simple_page.show_interface = lambda i: seen.append(i.name)

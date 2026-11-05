@@ -43,6 +43,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self._helper = None
         self._timer = 0
         self._busy = False
+        self._refresh_requested = False
         self._destroyed = False
         self._current: Iface | None = None
         self.last_reading: dict | None = None
@@ -73,7 +74,8 @@ class MainWindow(Gtk.ApplicationWindow):
                                       authorize_wol=self.authorized_wol, update_wol=self.update_wol)
         self.advanced_page = AdvancedPage(self.helper_call, persist_call,
                                           authorize_wol=self.authorized_wol,
-                                          read_wol=self.read_wol_cached, update_wol=self.update_wol)
+                                          read_wol=self.read_wol_cached, update_wol=self.update_wol,
+                                          on_change=self.refresh)
         self.stack.add_named(self.simple_page, "simple")
         self.stack.add_named(self.advanced_page, "advanced")
         self.stack.show_all()
@@ -109,7 +111,16 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def _on_mode(self, button: Gtk.RadioButton, mode: str) -> None:
         if button.get_active():
+            if mode == "simple" and self.advanced_page.keep_bar.token:
+                self.mode_buttons["advanced"].set_active(True)
+                self.advanced_page._message(_("confirm_pending_change"))
+                return
+            if mode == "advanced" and self.simple_page.keep_bar.token:
+                self.mode_buttons["simple"].set_active(True)
+                self.simple_page._message(_("confirm_pending_change"))
+                return
             self.stack.set_visible_child_name(mode)
+            self.refresh()
 
     # -- interface list and selection -------------------------------------
 
@@ -134,7 +145,10 @@ class MainWindow(Gtk.ApplicationWindow):
     # -- periodic refresh (reads never run on the UI thread) ---------------
 
     def refresh(self) -> None:
-        if self._busy or self._destroyed:
+        if self._destroyed:
+            return
+        if self._busy:
+            self._refresh_requested = True
             return
         self._busy = True
         iface = self._current
@@ -176,6 +190,9 @@ class MainWindow(Gtk.ApplicationWindow):
                 page.needs_authorization = authorize
                 if hasattr(page, "show_reading"):
                     page.show_reading(reading)
+        if self._refresh_requested:
+            self._refresh_requested = False
+            GLib.idle_add(self.refresh)
         return False
 
     def _start_timer(self) -> None:

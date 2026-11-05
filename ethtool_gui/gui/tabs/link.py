@@ -44,6 +44,15 @@ class LinkTab(Topic):
         self.apply_button.connect("clicked", lambda *_: apply(self.iface, "link", self.collect())
                                   if apply and self.iface else None)
         self.pack_start(self.apply_button, False, False, 0)
+        self.autoneg.connect("notify::active", self._sync_controls)
+
+    def _sync_controls(self, *_args) -> None:
+        available = self.autoneg.get_sensitive()
+        automatic = self.autoneg.get_active()
+        self.speed.set_sensitive(available and not automatic)
+        self.duplex.set_sensitive(available and not automatic)
+        for mode, check in self.mode_checks.items():
+            check.set_sensitive(available and automatic and mode in MODE_BITS)
 
     def load(self, iface: str) -> LinkInfo:
         return self.reader(iface)
@@ -75,13 +84,24 @@ class LinkTab(Topic):
             self.modes.pack_start(check, False, False, 0)
             self.mode_checks[mode] = check
         self.modes.show_all()
+        self._sync_controls()
 
     def collect(self) -> dict:
         enabled = self.autoneg.get_active()
         if not enabled:
             speed, duplex = self.speed.get_active_id(), self.duplex.get_active_id()
-            return {"autoneg": False, "speed": int(speed), "duplex": duplex} if speed and duplex else {}
+            if not speed or not duplex:
+                return {}
+            if (self.current.autoneg.value is False and self.current.speed_mbps.value == int(speed)
+                    and (self.current.duplex.value or "").lower() == duplex):
+                return {}
+            return {"autoneg": False, "speed": int(speed), "duplex": duplex}
         selected = [mode for mode, check in self.mode_checks.items() if check.get_active() and mode in MODE_BITS]
+        advertised = self.current.advertised_modes.value or []
+        if any(mode not in MODE_BITS for mode in advertised):
+            return {}
+        if self.current.autoneg.value is True and set(selected) == set(advertised):
+            return {}
         if selected:
             return {"autoneg": True, "advertise": "0x%x" % sum(1 << MODE_BITS[m] for m in selected)}
         return {"autoneg": True}
