@@ -42,7 +42,7 @@ class Result:
     stderr: str
 
 
-def run_ethtool(args: list[str], *, binary: str = "ethtool", timeout: float = 5.0) -> Result:
+def run_ethtool(args: list[str], *, binary: str = "/usr/sbin/ethtool", timeout: float = 5.0) -> Result:
     env = dict(os.environ, LC_ALL="C")
     try:
         done = subprocess.run([binary, *args], capture_output=True, text=True,
