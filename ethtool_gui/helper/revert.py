@@ -141,7 +141,8 @@ def _call(argv: list[str]) -> bool:
 
 def arm(systemd_run: str, token: str, seconds: float) -> bool:
     """Start the system timer that restores even if the helper dies."""
-    return _call([systemd_run, "--on-active=%ds" % seconds, f"--unit={unit_name(token)}",
+    return _call([systemd_run, "--on-active=%ds" % seconds,
+                  "--timer-property=AccuracySec=1s", f"--unit={unit_name(token)}",
                   RESTORE_BIN, token])
 
 

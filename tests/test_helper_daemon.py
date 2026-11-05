@@ -349,7 +349,7 @@ class ApplyRevertTest(HelperBase):
         self.assertEqual(reply["watchdog"], "systemd")
         self.assertEqual(self.calls(), [["eth0"], FORCE])
         self.assertEqual(read_calls(self.fake, "systemd-run.log"), [[
-            "--on-active=30s", f"--unit=ethtool-gui-revert-{token}",
+            "--on-active=30s", "--timer-property=AccuracySec=1s", f"--unit=ethtool-gui-revert-{token}",
             "/usr/lib/ethtool-gui/ethtool-gui-restore", token]])
 
     def test_state_file_permissions_and_content(self):
