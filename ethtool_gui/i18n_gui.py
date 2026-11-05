@@ -1,5 +1,8 @@
 """String catalogs, one dictionary per language."""
 
+from .i18n_advanced import ADVANCED
+from .i18n_fields import FIELDS
+
 CATALOG = {
     "en": {
         "app_title": "Ethtool-GUI",
@@ -35,7 +38,7 @@ CATALOG = {
         "revert": "Revert",
         "keep_countdown": "Keep this change? Reverting in {seconds} s",
         "unknown_link_settings": "Speed and duplex are unknown; choose values in Advanced mode.",
-        "wol_unsupported": "Wake-on-LAN is unavailable on this interface.",
+        "wol_unsupported": "Wake-on-LAN capabilities could not be read for this interface.",
         "change_link_warning": "Changing the link can disconnect this interface. It will revert after 15 seconds unless you keep it.",
         "ssh_warning": "You are connected through SSH. Check that you can reconnect before keeping the change.",
         "default_route_warning": "This interface carries the default route.",
@@ -89,7 +92,7 @@ CATALOG = {
         "revert": "Ripristina",
         "keep_countdown": "Mantenere la modifica? Ripristino tra {seconds} s",
         "unknown_link_settings": "Velocità e duplex sconosciuti; scegli i valori in modalità Advanced.",
-        "wol_unsupported": "Wake-on-LAN non disponibile su questa interfaccia.",
+        "wol_unsupported": "Impossibile leggere le funzionalità Wake-on-LAN di questa interfaccia.",
         "change_link_warning": "La modifica del link può disconnettere questa interfaccia. Senza conferma verrà ripristinata dopo 15 secondi.",
         "ssh_warning": "Sei collegato via SSH. Verifica di poterti ricollegare prima di mantenere la modifica.",
         "default_route_warning": "Questa interfaccia usa la rotta predefinita.",
@@ -129,7 +132,7 @@ CATALOG.update({
         "check_cable": "Tester le câble", "keep": "Conserver", "keep_and_save": "Conserver et enregistrer pour le démarrage",
         "revert": "Rétablir", "keep_countdown": "Conserver cette modification ? Rétablissement dans {seconds} s",
         "unknown_link_settings": "Vitesse et duplex inconnus ; choisissez-les en mode Avancé.",
-        "wol_unsupported": "Wake-on-LAN indisponible sur cette interface.",
+        "wol_unsupported": "Impossible de lire les capacités Wake-on-LAN de cette interface.",
         "change_link_warning": "Modifier le lien peut déconnecter cette interface. Sans confirmation, il sera rétabli après 15 secondes.",
         "ssh_warning": "Vous êtes connecté par SSH. Vérifiez que vous pouvez vous reconnecter avant de conserver la modification.",
         "default_route_warning": "Cette interface porte la route par défaut.",
@@ -166,7 +169,7 @@ CATALOG.update({
         "check_cable": "Kabel prüfen", "keep": "Beibehalten", "keep_and_save": "Beibehalten und für den Start speichern",
         "revert": "Zurücksetzen", "keep_countdown": "Änderung beibehalten? Rücksetzung in {seconds} s",
         "unknown_link_settings": "Geschwindigkeit und Duplex unbekannt; wählen Sie Werte im erweiterten Modus.",
-        "wol_unsupported": "Wake-on-LAN ist für diese Schnittstelle nicht verfügbar.",
+        "wol_unsupported": "Die Wake-on-LAN-Fähigkeiten dieser Schnittstelle konnten nicht gelesen werden.",
         "change_link_warning": "Eine Änderung der Verbindung kann diese Schnittstelle trennen. Ohne Bestätigung wird sie nach 15 Sekunden zurückgesetzt.",
         "ssh_warning": "Sie sind über SSH verbunden. Prüfen Sie vor dem Beibehalten, ob Sie sich erneut verbinden können.",
         "default_route_warning": "Diese Schnittstelle verwendet die Standardroute.",
@@ -203,7 +206,7 @@ CATALOG.update({
         "check_cable": "Comprobar el cable", "keep": "Conservar", "keep_and_save": "Conservar y guardar para el arranque",
         "revert": "Restablecer", "keep_countdown": "¿Conservar este cambio? Se restablecerá en {seconds} s",
         "unknown_link_settings": "Velocidad y dúplex desconocidos; elija valores en el modo Avanzado.",
-        "wol_unsupported": "Wake-on-LAN no está disponible en esta interfaz.",
+        "wol_unsupported": "No se pudieron leer las capacidades Wake-on-LAN de esta interfaz.",
         "change_link_warning": "Cambiar el enlace puede desconectar esta interfaz. Si no lo confirma, se restablecerá tras 15 segundos.",
         "ssh_warning": "Está conectado mediante SSH. Compruebe que puede volver a conectarse antes de conservar el cambio.",
         "default_route_warning": "Esta interfaz lleva la ruta predeterminada.",
@@ -224,3 +227,9 @@ CATALOG.update({
         "diag.link_down": "Sin enlace: el cable puede estar desconectado o el equipo del otro extremo apagado.",
     },
 })
+
+for language, messages in ADVANCED.items():
+    CATALOG[language].update(messages)
+
+for language, messages in FIELDS.items():
+    CATALOG[language].update(messages)

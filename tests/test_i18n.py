@@ -2,19 +2,20 @@ import re
 import subprocess
 import sys
 import unittest
+from string import Formatter
 from pathlib import Path
 
 from ethtool_gui import __version__
 from ethtool_gui.i18n import CATALOG, translate
 
 ROOT = Path(__file__).resolve().parent.parent
-USED = re.compile(r"""(?<![\w.])(?:translate|_)\(\s*["']([\w.]+)["']""")
+USED = re.compile(r"""(?<![\w.])(?:translate|_)\(\s*["']([\w.]+)["'](?!\s*\+)""")
 
 
 class I18nTest(unittest.TestCase):
     def test_every_key_used_in_gui_exists_in_both_catalogs(self):
         keys = set()
-        for path in (ROOT / "ethtool_gui" / "gui").glob("*.py"):
+        for path in (ROOT / "ethtool_gui" / "gui").rglob("*.py"):
             keys |= set(USED.findall(path.read_text()))
         self.assertTrue(keys)
         for lang in ("en", "it"):
@@ -31,6 +32,23 @@ class I18nTest(unittest.TestCase):
     def test_catalogs_have_same_keys(self):
         for lang in ("it", "fr", "de", "es"):
             self.assertEqual(set(CATALOG["en"]), set(CATALOG[lang]), lang)
+
+    def test_catalog_placeholders_match(self):
+        def fields(value):
+            return {name for _, name, _, _ in Formatter().parse(value) if name}
+
+        for lang in ("it", "fr", "de", "es"):
+            for key, english in CATALOG["en"].items():
+                self.assertEqual(fields(english), fields(CATALOG[lang][key]), (lang, key))
+
+    def test_constructed_advanced_keys_exist(self):
+        from ethtool_gui.gui.tabs.base import FIELD_LABELS
+        keys = {"duplex_half", "duplex_full", "state_up", "state_down"}
+        keys.update(FIELD_LABELS.values())
+        keys.update("graph_" + name for name in ("errors", "crc", "collisions", "pause"))
+        keys.update("group_" + name for name in ("pause", "ring", "channels", "coalesce", "eee", "wol"))
+        for lang, catalog in CATALOG.items():
+            self.assertFalse(keys - catalog.keys(), lang)
 
     def test_language_selection_and_unknown_fallback(self):
         from unittest.mock import patch

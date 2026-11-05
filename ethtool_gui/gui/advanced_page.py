@@ -7,7 +7,7 @@ import os
 import gi
 
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk  # noqa: E402
+from gi.repository import GLib, Gtk  # noqa: E402
 
 from ..core.ifaces import Iface  # noqa: E402
 from ..core.models import LinkInfo  # noqa: E402
@@ -33,10 +33,15 @@ from .tabs.tools import DumpTab, TestTab  # noqa: E402
 class AdvancedPage(Gtk.Box):
     names = ["Link", "Driver", "Statistics", "Pause/Ring/Channels", "Coalescing", "Offload",
              "EEE/WoL", "RSS", "SFP", "Tests", "Dump", "Snapshot", "Persistence"]
+    tab_keys = ["tab_link", "tab_driver", "tab_statistics", "tab_pause_ring_channels",
+                "tab_coalescing", "tab_offload", "tab_eee_wol", "tab_rss", "tab_sfp",
+                "tab_tests", "tab_dump", "tab_snapshot", "tab_persistence"]
 
-    def __init__(self, helper_call, persist_call) -> None:
+    def __init__(self, helper_call, persist_call, *, authorize_wol=None, read_wol=None,
+                 update_wol=None) -> None:
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         self._helper_call, self._persist_call = helper_call, persist_call
+        self._update_wol = update_wol
         self._iface: str | None = None
         self._busy = False
         self._pending: tuple[str, dict] | None = None
@@ -46,21 +51,22 @@ class AdvancedPage(Gtk.Box):
             LinkTab(self.apply_change), TextTab(read_driver), StatsTab(),
             SettingsTab(("pause", "ring", "channels"), self.apply_change),
             SettingsTab(("coalesce",), self.apply_change), OffloadTab(self.apply_change),
-            SettingsTab(("eee", "wol"), self.apply_change),
-            TextTab(lambda iface: {"RSS": read_rss(iface), "RX classification rules": read_ntuple(iface)},
+            SettingsTab(("eee", "wol"), self.apply_change,
+                        wol_reader=read_wol, authorize_wol=authorize_wol),
+            TextTab(lambda iface: {_("tab_rss"): read_rss(iface), _("rx_classification_rules"): read_ntuple(iface)},
                     helper_call, "rss"),
             TextTab(read_module, helper_call, "module"), TestTab(helper_call, self._confirm), DumpTab(helper_call),
             SnapshotTab(), PersistenceTab(persist_call),
         ]
-        for name, tab in zip(self.names, self.tabs):
-            self.notebook.append_page(tab, Gtk.Label(label=name))
+        for key, tab in zip(self.tab_keys, self.tabs):
+            self.notebook.append_page(tab, Gtk.Label(label=_(key)))
         self.pack_start(self.notebook, True, True, 0)
         self.keep_bar = KeepBar(lambda: self._keep(False), lambda: self._keep(True), self._revert)
         self.pack_start(self.keep_bar, False, False, 0)
         self.notice = Gtk.Label(xalign=0, wrap=True)
         self.notice.set_no_show_all(True)
         self.pack_start(self.notice, False, False, 0)
-        self.notebook.connect("switch-page", lambda *_: self.refresh())
+        self.notebook.connect("switch-page", lambda *_: GLib.idle_add(self.refresh))
 
     def _confirm(self, text: str, danger: bool = False) -> bool:
         return confirm_dialog(self.get_toplevel(), text, danger)
@@ -132,6 +138,8 @@ class AdvancedPage(Gtk.Box):
                 self._pending = (iface, {op: values})
                 self.keep_bar.begin(reply["token"], reply["seconds"])
             else:
+                if op == "wol" and self._update_wol:
+                    self._update_wol(iface, values["wol"])
                 self._message(_("change_applied"))
                 if save:
                     thread_runner(lambda: self._persist_call(op="persist", iface=iface, values={op: values}),

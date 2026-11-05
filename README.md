@@ -20,6 +20,8 @@ Requirements: Debian 13 or a compatible system, Python 3.11 or newer, GTK 3,
 `ethtool`, polkit and systemd. NetworkManager is recommended for boot settings
 on interfaces it manages.
 
+The interface is available in English, Italian, French, German and Spanish.
+
 ## Use
 
 Launch **ethtool-GUI** from *SysLinuxOS Tools* or run `ethtool-gui`. Select an

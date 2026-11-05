@@ -8,6 +8,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
 from .base import Topic, scroll  # noqa: E402
+from ...i18n import translate as _  # noqa: E402
 
 
 class PersistenceTab(Topic):
@@ -17,9 +18,9 @@ class PersistenceTab(Topic):
         self.current: dict = {}
         self.status: dict = {}
         buttons = Gtk.Box(spacing=8)
-        self.load_button = Gtk.Button(label="Read boot settings")
-        self.make_button = Gtk.Button(label="Make persistent")
-        self.remove_button = Gtk.Button(label="Remove persistence")
+        self.load_button = Gtk.Button(label=_("read_boot_settings"))
+        self.make_button = Gtk.Button(label=_("make_persistent"))
+        self.remove_button = Gtk.Button(label=_("remove_persistence"))
         for button in (self.load_button, self.make_button, self.remove_button):
             buttons.pack_start(button, False, False, 0)
         self.pack_start(buttons, False, False, 0)
@@ -27,7 +28,7 @@ class PersistenceTab(Topic):
         self.remove_button.set_sensitive(False)
         self.store = Gtk.ListStore(str, str, str, str)
         self.table = Gtk.TreeView(model=self.store)
-        for index, title in enumerate(("Setting", "Current", "At boot", "Differs")):
+        for index, title in enumerate((_('setting'), _('current'), _('at_boot'), _('differs'))):
             self.table.append_column(Gtk.TreeViewColumn(title, Gtk.CellRendererText(), text=index))
         self.pack_start(scroll(self.table), True, True, 0)
         self.load_button.connect("clicked", self._load)
@@ -45,7 +46,7 @@ class PersistenceTab(Topic):
     def render_status(self, status: dict, current: dict) -> None:
         self.status, self.current = status, current
         backend = status.get("backend", "none")
-        self.unavailable(status.get("reason") or ("" if backend != "none" else "No persistence backend"))
+        self.unavailable(status.get("reason") or ("" if backend != "none" else _("no_persistence_backend")))
         self.make_button.set_sensitive(backend != "none" and bool(current))
         self.remove_button.set_sensitive(bool(status.get("managed")))
         self.store.clear()
@@ -56,7 +57,7 @@ class PersistenceTab(Topic):
             for key, value in sorted(values.items()):
                 boot = (saved.get(group) or {}).get(key)
                 self.store.append([f"{group}.{key}", str(value), "—" if boot is None else str(boot),
-                                   "Yes" if boot is not None and boot != value else ""])
+                                   _("yes") if boot is not None and boot != value else ""])
 
     def _run(self, request: dict, done) -> None:
         from ..common import thread_runner

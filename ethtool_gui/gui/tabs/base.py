@@ -10,6 +10,19 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
 from ...core.models import Field  # noqa: E402
+from ...i18n import translate as _  # noqa: E402
+
+FIELD_LABELS = {
+    name: "field_" + name for name in (
+        "state", "speed_mbps", "duplex", "autoneg", "supported_modes", "advertised_modes",
+        "partner_modes", "port", "transceiver", "mdix", "wol_supported", "wol_current",
+        "driver", "version", "firmware_version", "bus_info", "supports_test", "supports_eeprom",
+        "supports_register_dump", "supports_statistics", "values", "supported", "reason",
+        "enabled", "active", "tx_lpi_us", "current", "supported_flag", "raw", "indirection",
+        "hash_key", "identifier", "vendor", "part", "readings", "alarm_flags", "name",
+        "value", "unit", "warn_low", "alarm_low", "warn_high", "alarm_high", "threshold_unit",
+    )
+}
 
 
 def scroll(widget: Gtk.Widget) -> Gtk.ScrolledWindow:
@@ -35,7 +48,7 @@ class Topic(Gtk.Box):
         self.reason.set_text("")
 
     def unavailable(self, reason: str | None) -> None:
-        self.reason.set_text(reason or "Unavailable")
+        self.reason.set_text(_("unavailable") if reason is None else reason)
 
 
 class TextTab(Topic):
@@ -43,7 +56,7 @@ class TextTab(Topic):
         super().__init__()
         self.reader = reader
         self.helper_call, self.what = helper_call, what
-        self.authorize_button = Gtk.Button(label="Read with authorization")
+        self.authorize_button = Gtk.Button(label=_("read_with_authorization"))
         self.authorize_button.set_no_show_all(True)
         self.authorize_button.connect("clicked", self._authorized_read)
         self.pack_start(self.authorize_button, False, False, 0)
@@ -82,12 +95,20 @@ class TextTab(Topic):
 
 def format_data(data) -> str:
     if isinstance(data, Field):
-        return str(data.value) if data.supported else (data.reason or "Unavailable")
+        return format_data(data.value) if data.supported else (data.reason or _("unavailable"))
     if dataclasses.is_dataclass(data):
-        return "\n".join(f"{field.name.replace('_', ' ').title()}: {format_data(getattr(data, field.name))}"
-                         for field in dataclasses.fields(data))
+        lines = []
+        for field in dataclasses.fields(data):
+            value = getattr(data, field.name)
+            if value is None or isinstance(value, Field) and value.value is None and value.supported:
+                continue
+            caption = _(FIELD_LABELS[field.name]) if field.name in FIELD_LABELS else field.name.replace("_", " ").title()
+            lines.append(f"{caption}: {format_data(value)}")
+        return "\n".join(lines)
     if isinstance(data, dict):
         return "\n".join(f"{key}: {format_data(value)}" for key, value in data.items())
     if isinstance(data, (list, tuple)):
         return "\n".join(format_data(value) for value in data)
+    if isinstance(data, bool):
+        return _("yes") if data else _("no")
     return "" if data is None else str(data)

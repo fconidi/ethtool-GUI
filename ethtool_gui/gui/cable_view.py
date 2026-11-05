@@ -8,6 +8,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
 from ..core.cable import PairResult  # noqa: E402
+from ..i18n import translate as _  # noqa: E402
 
 
 class CableView(Gtk.DrawingArea):
@@ -43,7 +44,7 @@ class CableView(Gtk.DrawingArea):
             ctx.stroke()
             ctx.set_source_rgb(.18, .21, .24)
             ctx.move_to(8, y + 4)
-            ctx.show_text(f"Pair {pair.pair}")
+            ctx.show_text(_("cable_pair", pair=pair.pair))
             distance = pair.fault_at_m if pair.fault_at_m is not None else pair.length_m
             if distance is not None:
                 x = 70 + (end - 70) * max(0, distance) / max_distance

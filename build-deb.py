@@ -11,7 +11,8 @@ import tempfile
 from pathlib import Path
 
 MODULES = (
-    "__init__.py", "__main__.py", "i18n.py", "i18n_gui.py",
+    "__init__.py", "__main__.py", "i18n.py", "i18n_gui.py", "i18n_advanced.py",
+    "i18n_fields.py",
     "core/__init__.py", "core/cable.py", "core/diagnosis.py", "core/ifaces.py",
     "core/models.py", "core/module.py", "core/parse_basic.py", "core/parse_settings.py",
     "core/protocol.py", "core/runner.py", "core/snapshot.py", "core/stats.py",

@@ -11,6 +11,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
 from ..core.stats import group_of  # noqa: E402
+from ..i18n import translate as _  # noqa: E402
 
 HISTORY = 120
 COLORS = {
@@ -72,7 +73,7 @@ class RateGraph(Gtk.DrawingArea):
             ctx.rectangle(x, 4, 7, 7)
             ctx.fill()
             ctx.move_to(x + 11, 12)
-            ctx.show_text(category.title())
+            ctx.show_text(_("graph_" + category))
         if not self.history:
             return False
         for category, color in COLORS.items():

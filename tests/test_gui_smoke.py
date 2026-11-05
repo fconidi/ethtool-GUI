@@ -123,6 +123,36 @@ class WindowTest(unittest.TestCase):
         self.window.refresh()
         self.assertTrue(pump(lambda: self.window.simple_page.needs_authorization))
 
+    def test_authorized_wol_read_populates_both_views(self):
+        from ethtool_gui.core.models import Field, LinkInfo
+        from ethtool_gui.core.parse_settings import Wol
+
+        class Helper:
+            def call(self, cmd, **args):
+                self.request = (cmd, args)
+                return {"data": {"supported": "pumbg", "current": "d", "supported_flag": True}}
+
+            def close(self):
+                pass
+
+        helper = Helper()
+        self.window._helper = helper
+        self.window.iface_list.select("eth0")
+        self.assertEqual(self.window.authorized_wol("eth0"), ("pumbg", "d"))
+        self.assertEqual(helper.request, ("read", {"iface": "eth0", "what": "wol"}))
+        reading = {"link": LinkInfo(wol_supported=Field(None), wol_current=Field(None))}
+        iface = self.window.current_iface
+        self.window._apply([iface], {"eth0": "1000"}, iface, reading, False)
+        self.assertTrue(self.window.simple_page.wol_switch.get_sensitive())
+        self.assertFalse(self.window.simple_page.wol_switch.get_active())
+        self.assertEqual(self.window.read_wol_cached("eth0"), Wol("pumbg", "d", True))
+        self.window.update_wol("eth0", "g")
+        self.assertEqual(self.window.read_wol_cached("eth0"), Wol("pumbg", "g", True))
+
+    def test_late_read_result_after_close_is_ignored(self):
+        self.window.destroy()
+        self.assertFalse(self.window._apply([], {}, None, None, False))
+
 
 @unittest.skipUnless(HAVE_DISPLAY, "no display")
 class IconTest(unittest.TestCase):

@@ -8,15 +8,16 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
 from ...core import snapshot  # noqa: E402
+from ...i18n import translate as _  # noqa: E402
 from .base import Topic, scroll  # noqa: E402
 
 
 class SnapshotTab(Topic):
     def __init__(self) -> None:
         super().__init__()
-        self.take_button = Gtk.Button(label="Take snapshot")
-        self.compare_button = Gtk.Button(label="Compare selected snapshots")
-        self.export_button = Gtk.Button(label="Export comparison")
+        self.take_button = Gtk.Button(label=_("take_snapshot"))
+        self.compare_button = Gtk.Button(label=_("compare_snapshots"))
+        self.export_button = Gtk.Button(label=_("export_comparison"))
         row = Gtk.Box(spacing=8)
         for button in (self.take_button, self.compare_button, self.export_button):
             row.pack_start(button, False, False, 0)
@@ -24,7 +25,7 @@ class SnapshotTab(Topic):
         self.store = Gtk.ListStore(str, str)
         self.list = Gtk.TreeView(model=self.store, headers_visible=False)
         self.list.get_selection().set_mode(Gtk.SelectionMode.MULTIPLE)
-        self.list.append_column(Gtk.TreeViewColumn("Snapshot", Gtk.CellRendererText(), text=0))
+        self.list.append_column(Gtk.TreeViewColumn(_("tab_snapshot"), Gtk.CellRendererText(), text=0))
         chooser = scroll(self.list)
         chooser.set_size_request(-1, 110)
         self.pack_start(chooser, False, False, 0)
@@ -60,7 +61,7 @@ class SnapshotTab(Topic):
     def _compare(self, *_args) -> None:
         paths = self._selected_paths()
         if len(paths) != 2:
-            self.unavailable("Select exactly two snapshots")
+            self.unavailable(_("select_two_snapshots"))
             return
         from pathlib import Path
         try:
@@ -70,14 +71,14 @@ class SnapshotTab(Topic):
 
     def show_diff(self, old: dict, new: dict) -> None:
         changes = snapshot.diff(old, new)
-        self._comparison = "\n".join(f"{c.path}: {c.old!r} → {c.new!r}" for c in changes) or "No differences"
+        self._comparison = "\n".join(f"{c.path}: {c.old!r} → {c.new!r}" for c in changes) or _("no_differences")
         self.output.get_buffer().set_text(self._comparison)
         self.unavailable("")
 
     def _export(self, *_args) -> None:
         if not self._comparison:
             return
-        dialog = Gtk.FileChooserDialog(title="Export comparison", transient_for=self.get_toplevel(),
+        dialog = Gtk.FileChooserDialog(title=_("export_comparison"), transient_for=self.get_toplevel(),
                                        action=Gtk.FileChooserAction.SAVE)
         dialog.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
                            Gtk.STOCK_SAVE, Gtk.ResponseType.OK)

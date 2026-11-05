@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+from dataclasses import replace
 from pathlib import Path
 
 import gi
@@ -11,13 +12,15 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
 from ..core.ifaces import Iface, list_interfaces  # noqa: E402
+from ..core.models import Field, LinkInfo, Wol  # noqa: E402
 from ..core.parse_basic import read_driver, read_link  # noqa: E402
+from ..core.parse_settings import read_wol  # noqa: E402
 from ..core.runner import EthtoolMissing  # noqa: E402
 from ..core.stats import read_stats  # noqa: E402
 from ..i18n import translate as _  # noqa: E402
 from . import style  # noqa: E402
 from .common import needs_authorization  # noqa: E402
-from .helper_client import HelperClient  # noqa: E402
+from .helper_client import HelperClient, HelperError  # noqa: E402
 from .iface_list import IfaceList, sysfs_speed  # noqa: E402
 from .advanced_page import AdvancedPage  # noqa: E402
 from .simple_page import SimplePage  # noqa: E402
@@ -40,8 +43,10 @@ class MainWindow(Gtk.ApplicationWindow):
         self._helper = None
         self._timer = 0
         self._busy = False
+        self._destroyed = False
         self._current: Iface | None = None
         self.last_reading: dict | None = None
+        self._privileged_wol: dict[str, tuple[str, str]] = {}
 
         style.apply()
         icon = Path(__file__).resolve().parents[2] / "data" / "ethtool-gui.svg"
@@ -64,8 +69,11 @@ class MainWindow(Gtk.ApplicationWindow):
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, margin=14)
         body.pack_start(content, True, True, 0)
         self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
-        self.simple_page = SimplePage(self.helper_call, persist_call)
-        self.advanced_page = AdvancedPage(self.helper_call, persist_call)
+        self.simple_page = SimplePage(self.helper_call, persist_call,
+                                      authorize_wol=self.authorized_wol, update_wol=self.update_wol)
+        self.advanced_page = AdvancedPage(self.helper_call, persist_call,
+                                          authorize_wol=self.authorized_wol,
+                                          read_wol=self.read_wol_cached, update_wol=self.update_wol)
         self.stack.add_named(self.simple_page, "simple")
         self.stack.add_named(self.advanced_page, "advanced")
         self.stack.show_all()
@@ -126,7 +134,7 @@ class MainWindow(Gtk.ApplicationWindow):
     # -- periodic refresh (reads never run on the UI thread) ---------------
 
     def refresh(self) -> None:
-        if self._busy:
+        if self._busy or self._destroyed:
             return
         self._busy = True
         iface = self._current
@@ -148,6 +156,8 @@ class MainWindow(Gtk.ApplicationWindow):
         threading.Thread(target=work, name="reader", daemon=True).start()
 
     def _apply(self, ifaces, speeds, iface, reading, missing) -> bool:
+        if self._destroyed:
+            return False
         self._busy = False
         self.iface_list.set_interfaces(ifaces, speeds)
         if missing:
@@ -155,6 +165,11 @@ class MainWindow(Gtk.ApplicationWindow):
             self.ethtool_label.show()
         if reading is not None and iface is not None and self._current is not None \
                 and self._current.name == iface.name:
+            link = reading.get("link")
+            cached = self._privileged_wol.get(iface.name)
+            if isinstance(link, LinkInfo) and cached and link.wol_supported.value is None:
+                reading = {**reading, "link": replace(link, wol_supported=Field(cached[0]),
+                                                       wol_current=Field(cached[1]))}
             self.last_reading = reading
             authorize = needs_authorization(reading)
             for page in (self.simple_page, self.advanced_page):
@@ -186,10 +201,31 @@ class MainWindow(Gtk.ApplicationWindow):
             self._helper = self._helper_factory()
         return self._helper.call(cmd, **args)
 
+    def authorized_wol(self, iface: str) -> tuple[str, str]:
+        data = self.helper_call("read", iface=iface, what="wol").get("data") or {}
+        supported, current = data.get("supported"), data.get("current")
+        if not data.get("supported_flag") or not isinstance(supported, str) or not supported \
+                or not isinstance(current, str) or not current:
+            raise HelperError("wol_unavailable")
+        self._privileged_wol[iface] = (supported, current)
+        return supported, current
+
+    def read_wol_cached(self, iface: str) -> Wol:
+        if iface in self._privileged_wol:
+            supported, current = self._privileged_wol[iface]
+            return Wol(supported, current, True)
+        return read_wol(iface)
+
+    def update_wol(self, iface: str, current: str) -> None:
+        if iface in self._privileged_wol:
+            supported, _old = self._privileged_wol[iface]
+            self._privileged_wol[iface] = (supported, current)
+
     def poll_helper_events(self) -> list[dict]:
         return self._helper.poll_events() if self._helper is not None else []
 
     def _on_destroy(self, *_a) -> None:
+        self._destroyed = True
         self._stop_timer()
         if self._helper is not None:
             self._helper.close()

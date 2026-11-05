@@ -6,6 +6,7 @@ import os
 import subprocess
 import time
 from collections.abc import Callable
+from dataclasses import replace
 
 import gi
 
@@ -14,7 +15,7 @@ from gi.repository import Gtk  # noqa: E402
 
 from ..core.diagnosis import diagnose  # noqa: E402
 from ..core.ifaces import Iface  # noqa: E402
-from ..core.models import LinkInfo  # noqa: E402
+from ..core.models import Field, LinkInfo  # noqa: E402
 from ..core.stats import RateTracker, Stats, group_of  # noqa: E402
 from ..core.cable import PairResult  # noqa: E402
 from ..i18n import translate as _  # noqa: E402
@@ -36,10 +37,12 @@ def _default_route(iface: str) -> bool:
 
 
 class SimplePage(Gtk.Box):
-    def __init__(self, helper_call: Callable, persist_call: Callable) -> None:
+    def __init__(self, helper_call: Callable, persist_call: Callable,
+                 authorize_wol: Callable | None = None, update_wol: Callable | None = None) -> None:
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=14, margin=16)
         self._helper_call = helper_call
         self._persist_call = persist_call
+        self._authorize_wol, self._update_wol = authorize_wol, update_wol
         self._iface: str | None = None
         self._link: LinkInfo | None = None
         self._rates = RateTracker()
@@ -73,6 +76,13 @@ class SimplePage(Gtk.Box):
         controls.attach(Gtk.Label(label=_("wol"), xalign=0), 0, 1, 1, 1)
         controls.attach(self.wol_switch, 1, 1, 1, 1)
         self.pack_start(controls, False, False, 0)
+        self.wol_reason = Gtk.Label(xalign=0, wrap=True)
+        self.wol_reason.set_no_show_all(True)
+        self.pack_start(self.wol_reason, False, False, 0)
+        self.wol_auth_button = Gtk.Button(label=_("read_with_authorization"))
+        self.wol_auth_button.set_no_show_all(True)
+        self.wol_auth_button.connect("clicked", self._on_authorize_wol)
+        self.pack_start(self.wol_auth_button, False, False, 0)
 
         actions = Gtk.Box(spacing=8)
         self.blink_button = Gtk.Button(label=_("blink_led"))
@@ -106,6 +116,8 @@ class SimplePage(Gtk.Box):
             self.graph.queue_draw()
             self.cable_view.hide()
         self._iface = name
+        self.wol_reason.hide()
+        self.wol_auth_button.hide()
         self.title.set_text(_("select_iface_hint_named", name=name) if name else _("select_iface_hint"))
         self._updating = True
         self.autoneg_switch.set_sensitive(False)
@@ -143,7 +155,12 @@ class SimplePage(Gtk.Box):
             self.wol_switch.set_active(link.wol_current.value not in (None, "d"))
             self.wol_switch.set_sensitive(bool(self._iface) and wol.supported and bool(wol.value)
                                           and "g" in wol.value and not self._busy)
-            self.wol_switch.set_tooltip_text(wol.reason or (_("wol_unsupported") if not wol.value or "g" not in wol.value else None))
+            wol_message = wol.reason or (_("wol_unsupported") if not wol.value else
+                                         _("wol_magic_unavailable") if "g" not in wol.value else "")
+            self.wol_switch.set_tooltip_text(wol_message or None)
+            self.wol_reason.set_text(wol_message)
+            self.wol_reason.show() if wol_message and self._iface else self.wol_reason.hide()
+            self.wol_auth_button.show() if not wol.value and self._iface and self._authorize_wol else self.wol_auth_button.hide()
         finally:
             self._updating = False
 
@@ -198,8 +215,35 @@ class SimplePage(Gtk.Box):
     def _on_wol(self, switch, _param) -> None:
         if self._updating or not self._iface:
             return
-        self._run("apply", lambda _reply: self._message(_("change_applied")), iface=self._iface,
-                  op="wol", values={"wol": "g" if switch.get_active() else "d"})
+        iface, mode = self._iface, "g" if switch.get_active() else "d"
+
+        def done(_reply):
+            if self._update_wol:
+                self._update_wol(iface, mode)
+            self._message(_("change_applied"))
+
+        self._run("apply", done, iface=iface, op="wol", values={"wol": mode})
+
+    def _on_authorize_wol(self, *_args) -> None:
+        if not self._iface or not self._authorize_wol or self._busy:
+            return
+        iface = self._iface
+        self._busy = True
+        self.wol_auth_button.set_sensitive(False)
+
+        def done(result, error):
+            self._busy = False
+            self.wol_auth_button.set_sensitive(True)
+            if iface != self._iface:
+                return
+            if error:
+                self._message(error_text(error))
+            elif self._link:
+                supported, current = result
+                link = replace(self._link, wol_supported=Field(supported), wol_current=Field(current))
+                self.show_reading({"link": link})
+
+        thread_runner(lambda: self._authorize_wol(iface), done)
 
     def _on_blink(self, *_args) -> None:
         if self._iface:

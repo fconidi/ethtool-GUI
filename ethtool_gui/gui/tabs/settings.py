@@ -7,9 +7,10 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
-from ...core.models import Field  # noqa: E402
+from ...core.models import Field, Wol  # noqa: E402
 from ...core import parse_settings  # noqa: E402
 from ...helper.operations import OPS  # noqa: E402
+from ...i18n import translate as _  # noqa: E402
 from .base import Topic, label, scroll  # noqa: E402
 
 
@@ -24,26 +25,32 @@ READERS = {
 
 
 class SettingsTab(Topic):
-    def __init__(self, groups: tuple[str, ...], apply) -> None:
+    def __init__(self, groups: tuple[str, ...], apply, *, wol_reader=None,
+                 authorize_wol=None) -> None:
         super().__init__()
         self.groups = groups
         self.apply = apply
+        self.wol_reader, self.authorize_wol = wol_reader, authorize_wol
+        self._last_data: dict = {}
         self.controls: dict[str, dict[str, Gtk.Widget]] = {}
         self.original: dict[str, dict] = {}
         self.body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
         self.pack_start(scroll(self.body), True, True, 0)
 
     def load(self, iface: str) -> dict:
-        return {group: READERS[group](iface) for group in self.groups}
+        return {group: (self.wol_reader if group == "wol" and self.wol_reader else READERS[group])(iface)
+                for group in self.groups}
 
     def render(self, data: dict) -> None:
+        self._last_data = data
         for child in self.body.get_children():
             self.body.remove(child)
         self.controls.clear()
         self.original.clear()
         for group in self.groups:
             section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-            section.pack_start(label(group.title()), False, False, 0)
+            group_label = _("group_" + group)
+            section.pack_start(label(group_label), False, False, 0)
             self.body.pack_start(section, False, False, 0)
             obj = data.get(group)
             if obj is None:
@@ -54,8 +61,14 @@ class SettingsTab(Topic):
                 entry = Gtk.Entry(text=obj.current or "")
                 entry.set_sensitive(obj.supported_flag)
                 if not obj.supported_flag:
-                    entry.set_tooltip_text("Wake-on-LAN is not reported by this driver")
-                section.pack_start(label("Wake-on-LAN modes (p, u, m, b, a, g, s; d disables)"), False, False, 0)
+                    entry.set_tooltip_text(_("wol_unreported"))
+                section.pack_start(label(_("wol_modes")), False, False, 0)
+                if not obj.supported_flag:
+                    section.pack_start(label(_("wol_unreported")), False, False, 0)
+                    if self.authorize_wol:
+                        auth_button = Gtk.Button(label=_("read_with_authorization"))
+                        auth_button.connect("clicked", self._authorize_wol)
+                        section.pack_start(auth_button, False, False, 0)
                 section.pack_start(entry, False, False, 0)
                 self.controls[group]["wol"] = entry
                 self.original[group]["wol"] = obj.current
@@ -80,7 +93,7 @@ class SettingsTab(Topic):
                         continue
                     field = raw if isinstance(raw, Field) else Field(raw)
                     if not field.supported:
-                        unavailable = label(f"{key}: {field.reason or 'not supported'}")
+                        unavailable = label(f"{key}: {field.reason or _('not_supported')}")
                         unavailable.set_sensitive(False)
                         section.pack_start(unavailable, False, False, 0)
                         continue
@@ -104,14 +117,31 @@ class SettingsTab(Topic):
                     section.pack_start(row, False, False, 0)
                     self.controls[group][key.replace("_", "-")] = control
                     self.original[group][key.replace("_", "-")] = field.value
-            button = Gtk.Button(label=f"Apply {group}")
+            button = Gtk.Button(label=_("apply_group", group=group_label))
             button.connect("clicked", self._apply_group, group, False)
             section.pack_start(button, False, False, 0)
             if not OPS[group].is_link_affecting:
-                save_button = Gtk.Button(label=f"Apply and save {group} for boot")
+                save_button = Gtk.Button(label=_("apply_save_group", group=group_label))
                 save_button.connect("clicked", self._apply_group, group, True)
                 section.pack_start(save_button, False, False, 0)
         self.body.show_all()
+
+    def _authorize_wol(self, *_args) -> None:
+        if not self.iface or not self.authorize_wol:
+            return
+        from ..common import error_text, thread_runner
+        iface = self.iface
+
+        def done(result, error):
+            if iface != self.iface:
+                return
+            if error:
+                self.unavailable(error_text(error))
+                return
+            supported, current = result
+            self.render({**self._last_data, "wol": Wol(supported, current, True)})
+
+        thread_runner(lambda: self.authorize_wol(iface), done)
 
     def collect(self, group: str) -> dict:
         result = {}

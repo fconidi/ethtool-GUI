@@ -106,6 +106,19 @@ class SimplePageTest(unittest.TestCase):
         self.page.show_reading({"link": LinkInfo(wol_supported=Field(None, False, "not supported"))})
         self.assertFalse(self.page.wol_switch.get_sensitive())
         self.assertIn("not supported", self.page.wol_switch.get_tooltip_text())
+        self.assertTrue(self.page.wol_reason.get_visible())
+        self.assertIn("not supported", self.page.wol_reason.get_text())
+
+    def test_authorized_wol_read_enables_magic_packet_switch(self):
+        page = SimplePage(lambda *a, **k: {}, lambda **k: {},
+                          authorize_wol=lambda _iface: ("pumbg", "d"))
+        self.addCleanup(page.destroy)
+        page.show_interface("eth0")
+        page.show_reading({"link": LinkInfo(wol_supported=Field(None), wol_current=Field(None))})
+        self.assertTrue(page.wol_auth_button.get_visible())
+        page.wol_auth_button.clicked()
+        self.assertTrue(pump(lambda: page.wol_switch.get_sensitive()))
+        self.assertFalse(page.wol_switch.get_active())
 
 
 if __name__ == "__main__":

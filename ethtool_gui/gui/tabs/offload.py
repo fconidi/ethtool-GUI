@@ -10,6 +10,7 @@ from gi.repository import Gtk  # noqa: E402
 from ...core.models import FeaturesInfo  # noqa: E402
 from ...core.parse_settings import read_features  # noqa: E402
 from ...helper.operations import FEATURES  # noqa: E402
+from ...i18n import translate as _  # noqa: E402
 from .base import Topic, scroll  # noqa: E402
 
 
@@ -21,7 +22,7 @@ class OffloadTab(Topic):
         self.original: dict[str, bool] = {}
         self.rows = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         self.pack_start(scroll(self.rows), True, True, 0)
-        self.apply_button = Gtk.Button(label="Apply changed offloads")
+        self.apply_button = Gtk.Button(label=_("apply_offloads"))
         self.apply_button.connect("clicked", lambda *_: apply(self.iface, "features", self.collect())
                                   if apply and self.iface and self.collect() else None)
         self.pack_start(self.apply_button, False, False, 0)
@@ -43,9 +44,9 @@ class OffloadTab(Topic):
             check.set_active(feature.on)
             check.set_sensitive(not feature.fixed and name in FEATURES)
             if feature.fixed:
-                check.set_tooltip_text("Fixed by the driver")
+                check.set_tooltip_text(_("fixed_by_driver"))
             elif name not in FEATURES:
-                check.set_tooltip_text("This feature is not in the supported change list")
+                check.set_tooltip_text(_("feature_not_changeable"))
             self.rows.pack_start(check, False, False, 0)
             self.controls[name] = check
             self.original[name] = feature.on
