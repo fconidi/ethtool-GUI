@@ -66,3 +66,20 @@ def make_fake_command(directory: Path, name: str, code: int = 0) -> Path:
     script.write_text(_LOGGER.format(python=sys.executable, log=log, code=code), encoding="utf-8")
     script.chmod(script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     return script
+
+
+class FakeRunner:
+    """In-process runner: records each argv and answers with ``respond(argv)``.
+
+    ``respond`` returns ``(exit_code, stdout, stderr)`` or raises.
+    """
+
+    def __init__(self, respond):
+        self.calls: list[list[str]] = []
+        self._respond = respond
+
+    def __call__(self, argv):
+        from ethtool_gui.core.runner import Result
+
+        self.calls.append(list(argv))
+        return Result(*self._respond(list(argv)))
