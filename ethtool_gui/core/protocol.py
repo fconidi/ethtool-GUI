@@ -15,16 +15,16 @@ def encode_message(obj: dict) -> bytes:
     return json.dumps(obj, ensure_ascii=False, separators=(",", ":"), default=str).encode("utf-8") + b"\n"
 
 
-def iter_messages(stream: IO[bytes]) -> Iterator[dict]:
+def iter_messages(stream: IO[bytes], max_line: int = MAX_LINE) -> Iterator[dict]:
     """Yield each decoded object; a bad or oversized line yields ``{"error": ...}``."""
     while True:
-        line = stream.readline(MAX_LINE + 1)
+        line = stream.readline(max_line + 1)
         if not line:
             return
-        if len(line) > MAX_LINE and not line.endswith(b"\n"):
+        if len(line) > max_line and not line.endswith(b"\n"):
             # Discard the rest of the oversized line, then carry on.
             while True:
-                rest = stream.readline(MAX_LINE)
+                rest = stream.readline(max_line)
                 if not rest or rest.endswith(b"\n"):
                     break
             yield {"error": "line_too_long"}
