@@ -1,0 +1,5 @@
+Cable test completed for device eno1.
+Pair A, result: OK
+Pair B, result: OK
+Pair C, fault: Open Circuit, fault distance: 37.00m
+Pair D, result: OK

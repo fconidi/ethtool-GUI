@@ -1,0 +1,2 @@
+netlink error: Operation not supported
+Cannot get ring parameters: Operation not supported

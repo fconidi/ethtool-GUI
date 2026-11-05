@@ -1,0 +1,10 @@
+driver: e1000e
+version: 7.0.14-19-pve
+firmware-version: 0.1-4
+expansion-rom-version: 
+bus-info: 0000:00:1f.6
+supports-statistics: yes
+supports-test: yes
+supports-eeprom-access: yes
+supports-register-dump: yes
+supports-priv-flags: yes

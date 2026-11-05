@@ -1,0 +1,67 @@
+	Identifier                                : 0x03 (SFP)
+	Extended identifier                       : 0x04 (GBIC/SFP defined by 2-wire interface ID)
+	Connector                                 : 0x07 (LC)
+	Transceiver codes                         : 0x00 0x00 0x00 0x02 0x22 0x00 0x01 0x00 0x00
+	Transceiver type                          : Ethernet: 1000BASE-LX
+	Encoding                                  : 0x01 (8B/10B)
+	BR, Nominal                               : 1300MBd
+	Rate identifier                           : 0x00 (unspecified)
+	Length (SMF,km)                           : 10km
+	Length (SMF)                              : 10000m
+	Length (50um)                             : 550m
+	Length (62.5um)                           : 550m
+	Length (OM4)                              : 0m
+	Laser wavelength                          : 1310 nm
+	Vendor name                               : FS
+	Vendor OUI                                : 00:00:00
+	Vendor PN                                 : SFP-GE-LX
+	Vendor rev                                : A
+	Vendor SN                                 : G2112345678
+	Date code                                 : 210412
+	Optical diagnostics support               : Yes
+	Laser bias current                        : 18.402 mA
+	Laser output power                        : 0.1862 mW / -7.30 dBm
+	Receiver signal average optical power     : 0.1203 mW / -9.20 dBm
+	Module temperature                        : 38.50 degrees C / 101.30 degrees F
+	Module voltage                            : 3.3180 V
+	Alarm/warning flags implemented           : Yes
+	Laser bias current high alarm             : Off
+	Laser bias current low alarm              : Off
+	Laser bias current high warning           : Off
+	Laser bias current low warning            : Off
+	Laser output power high alarm             : Off
+	Laser output power low alarm              : Off
+	Laser output power high warning           : Off
+	Laser output power low warning            : Off
+	Module temperature high alarm             : Off
+	Module temperature low alarm              : Off
+	Module temperature high warning           : Off
+	Module temperature low warning            : Off
+	Module voltage high alarm                 : Off
+	Module voltage low alarm                  : Off
+	Module voltage high warning               : Off
+	Module voltage low warning                : Off
+	Laser rx power high alarm                 : Off
+	Laser rx power low alarm                  : Off
+	Laser rx power high warning               : Off
+	Laser rx power low warning                : Off
+	Laser bias current high alarm threshold   : 70.000 mA
+	Laser bias current low alarm threshold    : 1.000 mA
+	Laser bias current high warning threshold : 60.000 mA
+	Laser bias current low warning threshold  : 2.000 mA
+	Laser output power high alarm threshold   : 0.7943 mW / -1.00 dBm
+	Laser output power low alarm threshold    : 0.0501 mW / -13.00 dBm
+	Laser output power high warning threshold : 0.6310 mW / -2.00 dBm
+	Laser output power low warning threshold  : 0.0631 mW / -12.00 dBm
+	Module temperature high alarm threshold   : 95.00 degrees C / 203.00 degrees F
+	Module temperature low alarm threshold    : -45.00 degrees C / -49.00 degrees F
+	Module temperature high warning threshold : 85.00 degrees C / 185.00 degrees F
+	Module temperature low warning threshold  : -40.00 degrees C / -40.00 degrees F
+	Module voltage high alarm threshold       : 3.6000 V
+	Module voltage low alarm threshold        : 3.0000 V
+	Module voltage high warning threshold     : 3.5000 V
+	Module voltage low warning threshold      : 3.1000 V
+	Laser rx power high alarm threshold       : 0.7943 mW / -1.00 dBm
+	Laser rx power low alarm threshold        : 0.0079 mW / -21.00 dBm
+	Laser rx power high warning threshold     : 0.6310 mW / -2.00 dBm
+	Laser rx power low warning threshold      : 0.0100 mW / -20.00 dBm

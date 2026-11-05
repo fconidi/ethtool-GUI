@@ -1,0 +1,4 @@
+Cannot get driver information: No such device
+netlink error: no device matches name (offset 24)
+netlink error: No such device
+No data available

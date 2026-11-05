@@ -1,0 +1,9 @@
+RX flow hash indirection table for eno1 with 1 RX ring(s):
+    0:      0     0     0     0     0     0     0     0
+    8:      0     0     0     0     0     0     0     0
+RSS hash key:
+6d:5a:56:da:25:5b:0e:c2:41:67:25:3d:43:a3:8f:b0:d0:ca:2b:cb:ae:7b:30:b4:77:cb:2d:a3:80:30:f2:0c:6a:42:b7:3b:be:ac:01:fa
+RSS hash function:
+    toeplitz: on
+    xor: off
+    crc32: off
