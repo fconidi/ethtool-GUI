@@ -33,7 +33,7 @@ def iter_messages(stream: IO[bytes], max_line: int = MAX_LINE) -> Iterator[dict]
             continue
         try:
             obj = json.loads(line.decode("utf-8"))
-        except (UnicodeDecodeError, ValueError):
+        except (UnicodeDecodeError, ValueError, RecursionError):
             yield {"error": "bad_json"}
             continue
         if not isinstance(obj, dict):

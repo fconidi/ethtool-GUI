@@ -150,17 +150,17 @@ def disarm(systemctl: str, token: str) -> None:
 
 
 class Countdown(threading.Thread):
-    """Calls ``on_expire`` after ``seconds`` unless cancelled; ``on_gone`` if the NIC vanishes.
+    """Calls ``on_expire`` at the monotonic ``deadline`` unless cancelled; ``on_gone`` if the NIC vanishes.
 
     Only the disappearance of the interface stops it early: carrier or operstate
     changes are not looked at.
     """
 
-    def __init__(self, token: str, seconds: float, poll: float,
+    def __init__(self, token: str, deadline: float, poll: float,
                  present: Callable[[], bool], on_expire: Callable[[], None],
                  on_gone: Callable[[], None]) -> None:
         super().__init__(name=f"ethtool-gui-revert-{token}", daemon=True)
-        self._seconds, self._poll = seconds, poll
+        self._deadline, self._poll = deadline, poll
         self._present, self._on_expire, self._on_gone = present, on_expire, on_gone
         self._stop = threading.Event()
 
@@ -168,7 +168,7 @@ class Countdown(threading.Thread):
         self._stop.set()
 
     def run(self) -> None:
-        deadline = time.monotonic() + self._seconds
+        deadline = self._deadline
         while not self._stop.is_set():
             if not self._present():
                 self._on_gone()

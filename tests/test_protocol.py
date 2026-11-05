@@ -21,6 +21,10 @@ class ProtocolTest(unittest.TestCase):
         self.assertEqual(list(iter_messages(stream)),
                          [{"error": "bad_json"}] * 3 + [{"ok": 1}])
 
+    def test_deeply_nested_json_is_bad_json(self):
+        stream = io.BytesIO(b"[" * 60000 + b"\n" + encode_message({"ok": 1}))
+        self.assertEqual(list(iter_messages(stream)), [{"error": "bad_json"}, {"ok": 1}])
+
     def test_last_line_without_newline_is_read(self):
         self.assertEqual(list(iter_messages(io.BytesIO(b'{"a":1}'))), [{"a": 1}])
 

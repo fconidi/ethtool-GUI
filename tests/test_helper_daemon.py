@@ -282,6 +282,49 @@ class ValidationTest(HelperBase):
         self.assertEqual(reply["error"], "ethtool_failed")
         self.assertIn("unexpected", reply["detail"])
 
+    def test_selftest_timeouts(self):
+        with mock.patch.object(daemon, "run_ethtool",
+                               return_value=Result(0, "The test result is PASS\n", "")) as spy:
+            self.assertTrue(self.call("selftest", iface="eth0", mode="online")["ok"])
+            self.assertEqual(spy.call_args.kwargs["timeout"], 30)
+            self.assertTrue(self.call("selftest", iface="eth0", mode="offline", confirmed=True)["ok"])
+            self.assertEqual(spy.call_args.kwargs["timeout"], 120)
+
+    def test_cable_and_offline_selftest_hold_the_interface(self):
+        gate, started = threading.Event(), threading.Event()
+        real = daemon.run_ethtool
+
+        def slow(args, **kwargs):
+            if args[0] in ("--cable-test", "-t"):
+                started.set()
+                gate.wait(5)
+                return Result(0, "The test result is PASS\n", "")
+            return real(args, **kwargs)
+
+        for first in ({"cmd": "cable_test", "confirmed": True},
+                      {"cmd": "selftest", "mode": "offline", "confirmed": True}):
+            started.clear()
+            gate.clear()
+            with mock.patch.object(daemon, "run_ethtool", side_effect=slow):
+                cmd = first.pop("cmd")
+                ident = self.send(cmd, iface="eth0", **first)
+                self.assertTrue(started.wait(5))
+                self.assertEqual(self.call("cable_test", iface="eth0", confirmed=True)["error"],
+                                 "busy")
+                self.assertEqual(self.call("selftest", iface="eth0", mode="offline",
+                                           confirmed=True)["error"], "busy")
+                self.assertEqual(self.call("apply", iface="eth0", op="link",
+                                           values=LINK_VALUES)["error"], "busy")
+                self.assertTrue(self.call("blink", iface="eth0", seconds=1)["ok"])
+                gate.set()
+                self.assertTrue(self.reply_to(ident)["ok"])
+        reply = self.call("apply", iface="eth0", op="pause", values={"rx": False})
+        self.assertTrue(reply["ok"], reply)
+
+    def test_cable_test_busy_while_change_pending(self):
+        self.assertTrue(self.call("apply", iface="eth0", op="link", values=LINK_VALUES)["ok"])
+        self.assertEqual(self.call("cable_test", iface="eth0", confirmed=True)["error"], "busy")
+
     def test_in_flight_limit(self):
         gate = threading.Event()
 
@@ -302,7 +345,7 @@ class ApplyRevertTest(HelperBase):
         reply = self.apply_link()
         token = reply["token"]
         self.assertRegex(token, r"^[0-9a-f]{16}$")
-        self.assertEqual(reply["seconds"], 30)
+        self.assertTrue(0 < reply["seconds"] <= 30, reply)
         self.assertEqual(reply["watchdog"], "systemd")
         self.assertEqual(self.calls(), [["eth0"], FORCE])
         self.assertEqual(read_calls(self.fake, "systemd-run.log"), [[
@@ -363,6 +406,87 @@ class ApplyRevertTest(HelperBase):
         data["created_at"] -= daemon.STALE_SECONDS + 1
         path.write_text(json.dumps(data))
         self.apply_link()
+
+    def test_seconds_counted_from_arm_time(self):
+        real_arm = daemon.revert.arm
+
+        def slow_arm(*args):
+            ok = real_arm(*args)
+            time.sleep(0.3)
+            return ok
+
+        with mock.patch.object(daemon.revert, "arm", side_effect=slow_arm):
+            reply = self.apply_link()
+        self.assertLessEqual(reply["seconds"], 30 - 0.3)
+        self.assertGreater(reply["seconds"], 25)
+
+    def test_failed_apply_restores_and_frees_iface(self):
+        make_fake_ethtool(self.fake, {
+            ("eth0",): (0, fixture("settings-e1000e.txt"), ""),
+            tuple(FORCE): (1, "", "Cannot set new settings: Invalid argument\n"),
+            tuple(BACK): (0, "", ""),
+            ("-A", "eth0", "rx", "off"): (0, "", ""),
+        })
+        reply = self.call("apply", iface="eth0", op="link", values=LINK_VALUES)
+        self.assertEqual(reply["error"], "ethtool_failed")
+        self.assertIn("Invalid argument", reply["detail"])
+        self.assertEqual(self.calls(), [["eth0"], FORCE, BACK])
+        self.assertEqual(list(self.state.iterdir()), [])
+        stops = read_calls(self.fake, "systemctl.log")
+        self.assertEqual(len(stops), 1)
+        self.assertEqual(stops[0][0], "stop")
+        self.assertTrue(self.call("apply", iface="eth0", op="pause", values={"rx": False})["ok"])
+
+    def test_invalid_snapshot_refused_before_anything(self):
+        with mock.patch.object(daemon.OPS["link"], "snapshot",
+                               return_value={"autoneg": True, "advertise": "bogus"}):
+            reply = self.call("apply", iface="eth0", op="link", values=LINK_VALUES)
+        self.assertEqual(reply["error"], "cannot_snapshot")
+        self.assertEqual(self.calls(), [])
+        self.assertEqual(list(self.state.iterdir()) if self.state.exists() else [], [])
+        self.assertEqual(read_calls(self.fake, "systemd-run.log"), [])
+
+    def test_finish_failure_reports_error_and_frees_iface(self):
+        token = self.apply_link()["token"]
+        with mock.patch.object(daemon.OPS["link"], "restore", side_effect=RuntimeError("boom")):
+            self.assertTrue(self.call("cancel", token=token)["ok"])
+        event = self.event()
+        self.assertEqual((event["reason"], event["restored"], event["error"]),
+                         ("cancel", False, "boom"))
+        self.assertTrue(self.call("apply", iface="eth0", op="pause", values={"rx": False})["ok"])
+
+    def test_close_restores_every_token_even_if_one_fails(self):
+        (self.sys / "eth1").mkdir()
+        back1 = ["-s", "eth1", "autoneg", "on", "advertise", "0x2f"]
+        force1 = ["-s", "eth1", "autoneg", "off", "speed", "100", "duplex", "half"]
+        make_fake_ethtool(self.fake, {
+            ("eth0",): (0, fixture("settings-e1000e.txt"), ""),
+            ("eth1",): (0, fixture("settings-e1000e.txt"), ""),
+            tuple(FORCE): (0, "", ""), tuple(force1): (0, "", ""),
+            tuple(BACK): (0, "", ""), tuple(back1): (0, "", ""),
+        })
+        self.apply_link()
+        self.assertTrue(self.call("apply", iface="eth1", op="link", values=LINK_VALUES)["ok"])
+        real = daemon.OPS["link"].restore
+        calls = []
+
+        def flaky(iface, saved, run):
+            calls.append(iface)
+            if len(calls) == 1:
+                raise RuntimeError("first fails")
+            return real(iface, saved, run)
+
+        with mock.patch.object(daemon.OPS["link"], "restore", side_effect=flaky):
+            self.close_and_wait()
+        events = [self.event(1), self.event(1)]
+        self.assertEqual(sorted(e["restored"] for e in events), [False, True])
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(list(self.state.iterdir()), [])
+
+    def test_deep_json_rejected_then_serving_continues(self):
+        self.stdin.write(b"[" * 60000 + b"\n")
+        self.assertEqual(self.read()["error"], "bad_json")
+        self.assertTrue(self.call("ping")["ok"])
 
     def test_stdin_close_restores_immediately(self):
         token = self.apply_link()["token"]
@@ -430,8 +554,8 @@ class TimeoutTest(HelperBase):
         token = self.apply_link()["token"]
         self.assertEqual(restore.main([token]), 0)          # systemd fired first
         event = self.event()
-        self.assertEqual(event["reason"], "timeout")
-        self.assertIs(event["restored"], False)
+        self.assertEqual(event, {"event": "reverted", "token": token, "reason": "timeout",
+                                 "restored": True, "by": "watchdog"})
         self.assertEqual(self.calls().count(BACK), 1)
         with contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(restore.main([token]), 2)      # and a late second run is a no-op

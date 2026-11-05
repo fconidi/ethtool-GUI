@@ -17,6 +17,7 @@ Run = Callable[[list[str], float], Result]
 TIMEOUT = 5.0
 CABLE_TEST_TIMEOUT = 30.0
 BLINK_EXTRA = 5
+SELFTEST_TIMEOUT = {"online": 30.0, "offline": 120.0}
 DETAIL_MAX = 2000
 OUTPUT_MAX = 64 * 1024
 
@@ -68,7 +69,7 @@ def selftest(iface: str, request: dict, run: Run) -> dict:
         raise CommandError("bad_request", "mode")
     if mode == "offline":
         confirmed(request)
-    result = run(["-t", iface, mode], TIMEOUT)
+    result = run(["-t", iface, mode], SELFTEST_TIMEOUT[mode])
     out = result.stdout
     if "The test result is" not in out:
         check(result)

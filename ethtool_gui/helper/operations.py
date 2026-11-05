@@ -280,6 +280,8 @@ class Features(Operation):
 
     def _args(self, values: dict) -> list[str]:
         _only(values, FEATURES)
+        if len({SHORT_FEATURES.get(k, k) for k in values}) != len(values):
+            raise ValidationError("a feature is named twice (short and long name)")
         return [w for k in sorted(values) for w in (k, _onoff(_bool(values[k])))]
 
     def snapshot(self, iface: str, run: Runner, values: dict | None = None) -> dict:

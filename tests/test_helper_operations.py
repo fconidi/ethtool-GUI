@@ -95,6 +95,8 @@ class ValidateTest(unittest.TestCase):
         for name in ("bogus", "-E", "tso off", "loopback\n", ""):
             self.bad("features", {name: True})
         self.bad("features", {"tso": "off"})
+        self.bad("features", {"tso": False, "tcp-segmentation-offload": True})
+        self.bad("features", {"gro": False, "generic-receive-offload": False})
 
     def test_eee(self):
         self.assertEqual(OPS["eee"].validate({"tx-lpi": False, "eee": True}),

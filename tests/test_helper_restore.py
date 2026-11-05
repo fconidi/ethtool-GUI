@@ -96,6 +96,29 @@ class RestoreMainTest(unittest.TestCase):
         self.assertEqual(restore.main([TOKEN]), 2)
         self.assertEqual(read_calls(self.fake), [])
 
+    def test_invalid_saved_values_exit_2_and_keep_file(self):
+        for saved in ({"autoneg": "on"}, {"autoneg": False, "speed": 100}, {"rx": True}):
+            path = self.write(saved=saved)
+            self.assertEqual(restore.main([TOKEN]), 2, saved)
+            self.assertTrue(path.exists())
+            path.unlink()
+        self.assertEqual(read_calls(self.fake), [])
+
+    def test_symlinked_state_dir_refused(self):
+        real = self.root / "real"
+        real.mkdir(mode=0o700)
+        os.symlink(real, self.state)
+        with self.assertRaises(revert.StateError):
+            self.write()
+        self.assertEqual(list(real.iterdir()), [])
+
+    def test_state_dir_owned_by_someone_else_refused(self):
+        self.state.mkdir(mode=0o700)
+        with mock.patch.object(revert.os, "geteuid", return_value=os.geteuid() + 1):
+            with self.assertRaises(revert.StateError):
+                self.write()
+        self.assertEqual(list(self.state.iterdir()), [])
+
     def test_ethtool_failure_exit_1_and_state_removed(self):
         path = self.write(saved={"autoneg": False, "speed": 10, "duplex": "full"})
         self.assertEqual(restore.main([TOKEN]), 1)

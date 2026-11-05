@@ -9,8 +9,10 @@ undoes it even if this process is killed.
 
 from __future__ import annotations
 
+import contextlib
 import sys
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import IO
@@ -88,7 +90,10 @@ class Daemon:
             for worker in list(self._workers):
                 worker.join()
             for token in list(self._pending):
-                self._finish(token, "closed")
+                try:
+                    self._finish(token, "closed")
+                except Exception:
+                    pass  # one failure must not skip the other tokens
             for countdown in list(self._countdowns):
                 countdown.join()
         return 0
@@ -170,11 +175,34 @@ class Daemon:
     def _cmd_blink(self, request: dict) -> dict:
         return commands.blink(self._iface(request), request, _run)
 
+    @contextlib.contextmanager
+    def _reserve(self, iface: str):
+        """Hold the per-interface busy marker for the duration of the block."""
+        with self._lock:
+            if iface in self._busy or iface in revert.pending_ifaces(STATE_DIR, STALE_SECONDS):
+                raise CommandError("busy")
+            self._busy.add(iface)
+        hold = {"keep": False}
+        try:
+            yield hold
+        finally:
+            if not hold["keep"]:
+                with self._lock:
+                    self._busy.discard(iface)
+
     def _cmd_cable_test(self, request: dict) -> dict:
-        return commands.cable_test(self._iface(request), request, _run)
+        iface = self._iface(request)
+        commands.confirmed(request)
+        with self._reserve(iface):
+            return commands.cable_test(iface, request, _run)
 
     def _cmd_selftest(self, request: dict) -> dict:
-        return commands.selftest(self._iface(request), request, _run)
+        iface = self._iface(request)
+        if request.get("mode") != "offline":
+            return commands.selftest(iface, request, _run)
+        commands.confirmed(request)
+        with self._reserve(iface):
+            return commands.selftest(iface, request, _run)
 
     def _cmd_apply(self, request: dict) -> dict:
         iface = self._iface(request)
@@ -184,51 +212,50 @@ class Daemon:
             raise CommandError("unknown_op")
         values = request.get("values")
         argv = op.argv(iface, values)
-        with self._lock:
-            if iface in self._busy or iface in revert.pending_ifaces(STATE_DIR, STALE_SECONDS):
-                raise CommandError("busy")
-            self._busy.add(iface)
-        registered = False
-        try:
-            if not op.is_link_affecting:
+        if not op.is_link_affecting:
+            with self._reserve(iface):
                 check(_run(argv))
-                return {}
-            reply = self._apply_guarded(iface, op, values, argv)
-            registered = True
-            return reply
-        finally:
-            if not registered:
-                with self._lock:
-                    self._busy.discard(iface)
+            return {}
+        with self._reserve(iface) as hold:
+            return self._apply_guarded(iface, op, values, argv, hold)
 
-    def _apply_guarded(self, iface: str, op: Operation, values: dict, argv: list[str]) -> dict:
+    def _apply_guarded(self, iface: str, op: Operation, values: dict, argv: list[str],
+                       hold: dict) -> dict:
         saved = op.snapshot(iface, _runner(), values)
-        if not saved:
-            raise CommandError("cannot_snapshot")
+        try:
+            if not saved:
+                raise ValidationError("nothing saved")
+            op.argv(iface, saved)  # the saved values must make a valid restore
+        except ValidationError:
+            raise CommandError("cannot_snapshot") from None
         token = revert.new_token()
         revert.write_state(STATE_DIR, token, iface, op.name, saved)
+        deadline = time.monotonic() + REVERT_SECONDS  # the system timer counts from here too
         armed = revert.arm(SYSTEMD_RUN, token, REVERT_SECONDS)
         try:
             check(_run(argv))
         except BaseException:
             # Part of the change may have taken effect: put everything back now.
-            if revert.claim(STATE_DIR, token):
-                try:
+            try:
+                if revert.claim(STATE_DIR, token):
                     op.restore(iface, saved, _runner())
-                except (RestoreError, EthtoolError):
-                    pass
-            revert.disarm(SYSTEMCTL, token)
+            except Exception:
+                pass
+            finally:
+                revert.disarm(SYSTEMCTL, token)
             raise
         countdown = revert.Countdown(
-            token, REVERT_SECONDS, POLL_SECONDS,
+            token, deadline, POLL_SECONDS,
             present=lambda: (SYS_ROOT / iface).exists(),
             on_expire=lambda: self._finish(token, "timeout"),
             on_gone=lambda: self._finish(token, "gone", restore=False))
         with self._lock:
+            hold["keep"] = True  # the busy marker now belongs to the pending change
             self._pending[token] = Pending(iface, op.name, saved, countdown)
             self._countdowns.append(countdown)
         countdown.start()
-        return {"token": token, "seconds": REVERT_SECONDS,
+        remaining = max(0.0, round(deadline - time.monotonic(), 3))
+        return {"token": token, "seconds": remaining,
                 "watchdog": "systemd" if armed else "in-process only"}
 
     def _take(self, token: str) -> Pending | None:
@@ -247,16 +274,21 @@ class Daemon:
         pending = self._take(token)
         if pending is None:
             return False
-        claimed = revert.claim(STATE_DIR, token)
-        revert.disarm(SYSTEMCTL, token)
         event = {"event": "reverted", "token": token, "reason": reason, "restored": False}
-        if restore and claimed:
-            try:
+        try:
+            claimed = revert.claim(STATE_DIR, token)
+            revert.disarm(SYSTEMCTL, token)
+            if restore and claimed:
                 OPS[pending.op].restore(pending.iface, pending.saved, _runner())
                 event["restored"] = True
-            except (RestoreError, EthtoolError) as exc:
-                event["error"] = str(exc)[:DETAIL_MAX] or type(exc).__name__
-        self._release(pending)
+            elif restore:
+                # Nobody confirmed or cancelled, yet the file is gone: the system timer
+                # ran ethtool-gui-restore first.
+                event.update(restored=True, by="watchdog")
+        except Exception as exc:
+            event["error"] = str(exc)[:DETAIL_MAX] or type(exc).__name__
+        finally:
+            self._release(pending)
         self._write(event)
         return True
 
