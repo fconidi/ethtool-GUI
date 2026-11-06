@@ -11,7 +11,7 @@ from ...core.models import Field, Wol  # noqa: E402
 from ...core import parse_settings  # noqa: E402
 from ...helper.operations import OPS  # noqa: E402
 from ...i18n import translate as _  # noqa: E402
-from .base import Topic, label, scroll  # noqa: E402
+from .base import Topic, label, pretty_key, reason_text, scroll  # noqa: E402
 
 
 READERS = {
@@ -58,20 +58,18 @@ class SettingsTab(Topic):
             self.controls[group], self.original[group] = {}, {}
             fields = obj.values if group == "coalesce" else vars(obj)
             if group == "wol":
-                entry = Gtk.Entry(text=obj.current or "")
-                entry.set_sensitive(obj.supported_flag)
-                if not obj.supported_flag:
-                    entry.set_tooltip_text(_("wol_unreported"))
-                section.pack_start(label(_("wol_modes")), False, False, 0)
                 if not obj.supported_flag:
                     section.pack_start(label(_("wol_unreported")), False, False, 0)
                     if self.authorize_wol:
                         auth_button = Gtk.Button(label=_("read_with_authorization"))
                         auth_button.connect("clicked", self._authorize_wol)
                         section.pack_start(auth_button, False, False, 0)
-                section.pack_start(entry, False, False, 0)
-                self.controls[group]["wol"] = entry
-                self.original[group]["wol"] = obj.current
+                else:
+                    entry = Gtk.Entry(text=obj.current or "")
+                    section.pack_start(label(_("wol_modes")), False, False, 0)
+                    section.pack_start(entry, False, False, 0)
+                    self.controls[group]["wol"] = entry
+                    self.original[group]["wol"] = obj.current
             elif group == "eee":
                 for key, raw, value in (("eee", obj.enabled, obj.enabled.value),
                                         ("tx-lpi", obj.tx_lpi_us, obj.tx_lpi_us.value is not None)):
@@ -93,7 +91,7 @@ class SettingsTab(Topic):
                         continue
                     field = raw if isinstance(raw, Field) else Field(raw)
                     if not field.supported:
-                        unavailable = label(f"{key}: {field.reason or _('not_supported')}")
+                        unavailable = label(f"{pretty_key(key)}: {reason_text(field.reason)}")
                         unavailable.set_sensitive(False)
                         section.pack_start(unavailable, False, False, 0)
                         continue
@@ -112,11 +110,17 @@ class SettingsTab(Topic):
                     control.set_sensitive(field.supported)
                     control.set_tooltip_text(field.reason)
                     row = Gtk.Box(spacing=12)
-                    row.pack_start(label(key.replace("_", " ").replace("-", " ").title()), True, True, 0)
+                    row.pack_start(label(pretty_key(key)), True, True, 0)
                     row.pack_start(control, False, False, 0)
                     section.pack_start(row, False, False, 0)
                     self.controls[group][key.replace("_", "-")] = control
                     self.original[group][key.replace("_", "-")] = field.value
+            if not any(control.get_sensitive() for control in self.controls[group].values()):
+                if group == "coalesce" and not obj.supported:
+                    section.pack_start(label(reason_text(obj.reason)), False, False, 0)
+                elif not self.controls[group] and group != "wol":
+                    section.pack_start(label(_("not_supported")), False, False, 0)
+                continue
             button = Gtk.Button(label=_("apply_group", group=group_label))
             button.connect("clicked", self._apply_group, group, False)
             section.pack_start(button, False, False, 0)

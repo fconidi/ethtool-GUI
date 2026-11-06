@@ -129,18 +129,77 @@ class AdvancedTest(unittest.TestCase):
         self.addCleanup(tab.destroy)
         tab.show_interface("eth0")
         tab.render({"wol": Wol(None, None, False)})
-        self.assertFalse(tab.controls["wol"]["wol"].get_sensitive())
+        self.assertNotIn("wol", tab.controls["wol"])
+        self.assertEqual(tab.collect("wol"), {})
         buttons = [child for child in tab.body.get_children()[0].get_children()
                    if isinstance(child, Gtk.Button) and child.get_label() == "Read with authorization"]
         self.assertEqual(len(buttons), 1)
         buttons[0].clicked()
         end = time.monotonic() + 2
-        while time.monotonic() < end and not tab.controls["wol"]["wol"].get_sensitive():
+        while time.monotonic() < end and "wol" not in tab.controls["wol"]:
             while GLib.MainContext.default().pending():
                 GLib.MainContext.default().iteration(False)
             time.sleep(0.01)
         self.assertTrue(tab.controls["wol"]["wol"].get_sensitive())
         self.assertEqual(tab.controls["wol"]["wol"].get_text(), "d")
+
+    def test_reverted_event_refreshes_current_tab(self):
+        page = AdvancedPage(lambda *a, **k: None, lambda **k: {})
+        self.addCleanup(page.destroy)
+        page.keep_bar.begin("tok", 15)
+        with mock.patch.object(page, "refresh") as refresh:
+            page.on_helper_event({"event": "reverted", "token": "tok"})
+        refresh.assert_called_once()
+
+    def test_link_tab_without_interface_is_inactive(self):
+        page = AdvancedPage(lambda *a, **k: None, lambda **k: {})
+        self.addCleanup(page.destroy)
+        page.show_interface(None)
+        self.assertFalse(page.tabs[0].apply_button.get_sensitive())
+        self.assertFalse(page.tabs[0].autoneg.get_sensitive())
+
+    def _apply_buttons(self, tab):
+        found = []
+        def walk(widget):
+            if isinstance(widget, Gtk.Button) and (widget.get_label() or "").startswith("Apply"):
+                found.append(widget)
+            if isinstance(widget, Gtk.Container):
+                for child in widget.get_children():
+                    walk(child)
+        walk(tab.body)
+        return found
+
+    def test_unsupported_groups_have_no_apply_buttons(self):
+        from ethtool_gui.core.models import Coalesce, Pause
+        tab = SettingsTab(("pause", "coalesce"), lambda *args: None)
+        self.addCleanup(tab.destroy)
+        tab.render({"pause": Pause.unsupported("Operation not supported"),
+                    "coalesce": Coalesce(supported=False, reason="Operation not supported")})
+        self.assertEqual(self._apply_buttons(tab), [])
+
+    def test_supported_group_keeps_apply_button(self):
+        from ethtool_gui.core.models import Coalesce
+        tab = SettingsTab(("coalesce",), lambda *args: None)
+        self.addCleanup(tab.destroy)
+        tab.render({"coalesce": Coalesce(values={"rx-usecs": 5})})
+        self.assertEqual(len(self._apply_buttons(tab)), 2)
+
+    def test_not_reported_reason_follows_locale(self):
+        from ethtool_gui.core.parse_settings import NOT_REPORTED
+        from ethtool_gui.gui.tabs.base import reason_text
+        with mock.patch.dict("os.environ", {"LANGUAGE": "", "LC_ALL": "", "LC_MESSAGES": "", "LANG": "it_IT.UTF-8"}):
+            self.assertEqual(reason_text(NOT_REPORTED), "non riportato dal driver")
+            self.assertEqual(reason_text("Operation not supported"), "Operation not supported")
+
+    def test_stats_and_rss_text_without_dataclass_noise(self):
+        from ethtool_gui.core.models import Rss
+        from ethtool_gui.core.stats import Stats
+        from ethtool_gui.gui.tabs.base import format_data
+        self.assertEqual(format_data(Stats(values={"rx": 1})), "rx: 1")
+        text = format_data(Rss(raw="RAW", indirection=[0, 1], hash_key="ab"))
+        self.assertIn("RAW", text)
+        self.assertNotIn("ab", text)
+        self.assertNotIn("Supported", text)
 
     def test_driver_field_names_follow_locale(self):
         from ethtool_gui.gui.tabs.base import format_data

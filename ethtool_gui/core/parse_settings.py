@@ -9,6 +9,8 @@ from .models import (Channels, Coalesce, Eee, Feature, FeaturesInfo, Field, Paus
 from .parse_basic import Runner, _checked, _require_valid, read_link
 from .runner import run_ethtool
 
+NOT_REPORTED = "not reported by the driver"
+
 _PAIR = re.compile(r"^([A-Za-z][^:]*?):\s*(.*)$")
 
 
@@ -30,7 +32,7 @@ def _sections(text: str) -> dict[str, dict[str, str]]:
     return out
 
 
-def _int(value: str | None, what: str = "not reported by the driver") -> Field[int]:
+def _int(value: str | None, what: str = NOT_REPORTED) -> Field[int]:
     if value is None or not value.isdigit():
         return Field(None, False, what)
     return Field(int(value))
@@ -39,7 +41,7 @@ def _int(value: str | None, what: str = "not reported by the driver") -> Field[i
 def _onoff(value: str | None) -> Field[bool]:
     if value in ("on", "off"):
         return Field(value == "on")
-    return Field(None, False, "not reported by the driver")
+    return Field(None, False, NOT_REPORTED)
 
 
 def _fetch(iface: str, run: Runner, args: list[str]):

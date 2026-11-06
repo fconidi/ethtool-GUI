@@ -185,10 +185,16 @@ class AdvancedPage(Gtk.Box):
         token = self.keep_bar.token
         if token:
             thread_runner(lambda: self._helper_call("cancel", token=token),
-                          lambda _result, error: self._message(error_text(error) if error else _("change_reverted")))
+                          self._reverted)
+
+    def _reverted(self, _result, error) -> None:
+        self._message(error_text(error) if error else _("change_reverted"))
+        if not error:
+            self.refresh()
 
     def on_helper_event(self, event: dict) -> None:
         if event.get("event") == "reverted" and event.get("token") == self.keep_bar.token:
             self.keep_bar.end()
             self._pending = None
             self._message(_("change_reverted"))
+            self.refresh()

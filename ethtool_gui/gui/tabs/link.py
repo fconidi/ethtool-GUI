@@ -46,6 +46,13 @@ class LinkTab(Topic):
         self.pack_start(self.apply_button, False, False, 0)
         self.autoneg.connect("notify::active", self._sync_controls)
 
+    def show_interface(self, iface: str | None) -> None:
+        super().show_interface(iface)
+        if iface is None:
+            self.autoneg.set_sensitive(False)
+            self.apply_button.set_sensitive(False)
+            self._sync_controls()
+
     def _sync_controls(self, *_args) -> None:
         available = self.autoneg.get_sensitive()
         automatic = self.autoneg.get_active()
