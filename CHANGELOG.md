@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.6
+
+- Refreshed the current Advanced page after a change is reverted, automatically or manually.
+- Hid the Apply buttons on pages that the driver does not support and showed the reason instead.
+- Translated the "not reported by the driver" message and tidied field labels.
+- Removed duplicated and empty lines from the Statistics, RSS and SFP pages.
+- Removed the empty Wake-on-LAN entry shown when capabilities cannot be read.
+- Disabled the Advanced link controls when no interface is selected.
+
 ## 0.1.5
 
 - The application name is now spelled Ethtool-GUI in the applications menu, in the authorization prompts and in messages.
