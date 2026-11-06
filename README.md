@@ -24,10 +24,10 @@ sudo apt update
 sudo apt install ethtool-gui
 ```
 
-Alternatively, download the [ethtool-gui 0.1.5 Debian package](https://github.com/fconidi/ethtool-GUI/releases/download/v0.1.5/ethtool-gui_0.1.5_all.deb), then install it from the download directory:
+Alternatively, download the [ethtool-gui 0.1.6 Debian package](https://github.com/fconidi/ethtool-GUI/releases/download/v0.1.6/ethtool-gui_0.1.6_all.deb), then install it from the download directory:
 
 ```bash
-sudo apt install ./ethtool-gui_0.1.5_all.deb
+sudo apt install ./ethtool-gui_0.1.6_all.deb
 ```
 
 Other versions are listed on the [Releases page](https://github.com/fconidi/ethtool-GUI/releases).
