@@ -2,8 +2,8 @@
 <policyconfig>
   <vendor>SysLinuxOS</vendor>
   <action id="com.syslinuxos.ethtool-gui.change">
-    <description>Change Ethernet settings with ethtool-GUI</description>
-    <description xml:lang="it">Modifica le impostazioni Ethernet con ethtool-GUI</description>
+    <description>Change Ethernet settings with Ethtool-GUI</description>
+    <description xml:lang="it">Modifica le impostazioni Ethernet con Ethtool-GUI</description>
     <message>Authentication is required to change Ethernet settings</message>
     <message xml:lang="it">È richiesta l'autenticazione per modificare le impostazioni Ethernet</message>
     <defaults>

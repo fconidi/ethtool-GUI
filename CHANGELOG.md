@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.5
+
+- The application name is now spelled Ethtool-GUI in the applications menu, in the authorization prompts and in messages.
+
 ## 0.1.4
 
 - Refreshed Advanced link controls when returning from Simple.

@@ -1,6 +1,6 @@
-# ethtool-GUI
+# Ethtool-GUI
 
-**ethtool-GUI** is a GTK desktop interface for inspecting and configuring Ethernet interfaces on Debian and SysLinuxOS. Read operations run as your user; changes request authorization through polkit.
+**Ethtool-GUI** is a GTK desktop interface for inspecting and configuring Ethernet interfaces on Debian and SysLinuxOS. Read operations run as your user; changes request authorization through polkit.
 
 ![Simple view showing an active Ethernet link](docs/images/simple.png)
 
@@ -36,7 +36,7 @@ The package requires Python 3.11 or newer, GTK 3, `ethtool`, polkit and systemd.
 
 ## Usage
 
-Launch **ethtool-GUI** from the SysLinuxOS Tools menu or run `ethtool-gui`. Select a wired interface in the left pane. Simple shows its current state and common controls; Advanced opens the detailed tabs. Choose a control, review the requested operation and authorize it when prompted. For a link change, confirm **Keep** within 15 seconds if the new connection works. Use **Keep and save for boot** when you also want the setting after restart.
+Launch **Ethtool-GUI** from the SysLinuxOS Tools menu or run `ethtool-gui`. Select a wired interface in the left pane. Simple shows its current state and common controls; Advanced opens the detailed tabs. Choose a control, review the requested operation and authorize it when prompted. For a link change, confirm **Keep** within 15 seconds if the new connection works. Use **Keep and save for boot** when you also want the setting after restart.
 
 For Wake-on-LAN or module details, use the explicit authorized read control when ordinary user access cannot return the information. Snapshots are stored in your user data directory and can be compared or exported as text.
 

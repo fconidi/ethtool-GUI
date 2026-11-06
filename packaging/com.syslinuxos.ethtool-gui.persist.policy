@@ -2,8 +2,8 @@
 <policyconfig>
   <vendor>SysLinuxOS</vendor>
   <action id="com.syslinuxos.ethtool-gui.persist">
-    <description>Save Ethernet settings for boot with ethtool-GUI</description>
-    <description xml:lang="it">Salva le impostazioni Ethernet per il boot con ethtool-GUI</description>
+    <description>Save Ethernet settings for boot with Ethtool-GUI</description>
+    <description xml:lang="it">Salva le impostazioni Ethernet per il boot con Ethtool-GUI</description>
     <message>Authentication is required to save Ethernet settings for boot</message>
     <message xml:lang="it">È richiesta l'autenticazione per salvare le impostazioni Ethernet per il boot</message>
     <defaults>
