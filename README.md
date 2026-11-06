@@ -24,7 +24,13 @@ sudo apt update
 sudo apt install ethtool-gui
 ```
 
-Alternatively, download the `.deb` from [Releases](https://github.com/fconidi/ethtool-GUI/releases) and install it with `sudo apt install ./ethtool-gui_<version>_all.deb`.
+Alternatively, download the [ethtool-gui 0.1.4 Debian package](https://github.com/fconidi/ethtool-GUI/releases/download/v0.1.4/ethtool-gui_0.1.4_all.deb), then install it from the download directory:
+
+```bash
+sudo apt install ./ethtool-gui_0.1.4_all.deb
+```
+
+Other versions are listed on the [Releases page](https://github.com/fconidi/ethtool-GUI/releases).
 
 The package requires Python 3.11 or newer, GTK 3, `ethtool`, polkit and systemd. NetworkManager is recommended for saving settings on interfaces it manages. The interface is available in English, Italian, French, German and Spanish.
 
